@@ -53,42 +53,28 @@ jobs:
                 --auto-add-overlay
             }
 
-          echo "=== Step 3: Compile Kotlin sources ==="
-          KOTLIN_LIB=$ANDROID_HOME/../
-          find /usr/local/lib -name "kotlin-stdlib*.jar" 2>/dev/null | head -5
-          KOTLIN_STDLIB=$(find /usr/local/lib /opt -name "kotlin-stdlib-*.jar" 2>/dev/null | head -1)
-          if [ -z "$KOTLIN_STDLIB" ]; then
-            echo "Downloading kotlin-stdlib..."
-            curl -sL -o /tmp/kotlin-stdlib-1.9.20.jar \
-              "https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/1.9.20/kotlin-stdlib-1.9.20.jar"
-            KOTLIN_STDLIB=/tmp/kotlin-stdlib-1.9.20.jar
-          fi
-
+          echo "=== Step 3: Compile Java sources ==="
           ANDROID_JAR=$ANDROID_HOME/platforms/android-34/android.jar
           CLASSES_DIR=build/classes
           mkdir -p $CLASSES_DIR
 
-          SRC_FILES=$(find src/main/java -name "*.kt" 2>/dev/null)
+          SRC_FILES=$(find src/main/java -name "*.java" 2>/dev/null)
+          GEN_R=$(find build/gen -name "R.java" 2>/dev/null)
           if [ -n "$SRC_FILES" ]; then
-            echo "Compiling Kotlin files..."
-            kotlinc -cp $ANDROID_JAR:$KOTLIN_STDLIB \
+            echo "Compiling Java files..."
+            javac -source 17 -target 17 \
+              -cp $ANDROID_JAR \
               -d $CLASSES_DIR \
-              $SRC_FILES \
-              build/gen/com/vaelky/deskpet/R.java 2>/dev/null || \
-            kotlinc -cp $ANDROID_JAR:$KOTLIN_STDLIB \
-              -d $CLASSES_DIR \
-              $SRC_FILES
+              $SRC_FILES $GEN_R
           fi
 
           echo "=== Step 4: d8 dex ==="
-          ANDROID_JAR=$ANDROID_HOME/platforms/android-34/android.jar
           DEX_DIR=build/dex
           mkdir -p $DEX_DIR
           $ANDROID_HOME/build-tools/34.0.0/d8 \
             --lib $ANDROID_JAR \
             --output $DEX_DIR \
-            $CLASSES_DIR \
-            $KOTLIN_STDLIB
+            $CLASSES_DIR
 
           echo "=== Step 5: Copy assets ==="
           if [ -d "src/main/assets" ]; then
