@@ -408,12 +408,11 @@ class PetOverlayService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("🐾")
+            .setContentTitle("?")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
-            .setSilent(true)
             .build()
     }
 
