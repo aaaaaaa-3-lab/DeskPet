@@ -21,6 +21,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebChromeClient;
 import android.webkit.WebViewClient;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -102,6 +103,7 @@ public class PetOverlayService extends Service {
         settings.setAllowFileAccess(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         overlayView.setWebViewClient(new WebViewClient());
+        overlayView.setWebChromeClient(new WebChromeClient());
         overlayView.loadUrl("file:///android_asset/pet.html");
         overlayView.setOnTouchListener(createTouchListener());
 
@@ -136,8 +138,8 @@ public class PetOverlayService extends Service {
                         int dy = (int) (event.getRawY() - initialTouchY);
                         if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
                             hasMoved = true;
-                            params.x = initialX + dx;
-                            params.y = initialY + dy;
+                            params.x = initialX - dx;
+                            params.y = initialY - dy;
                             windowManager.updateViewLayout(overlayView, params);
                         }
                         return true;
