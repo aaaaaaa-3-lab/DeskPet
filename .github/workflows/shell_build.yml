@@ -74,7 +74,7 @@ jobs:
           $ANDROID_HOME/build-tools/34.0.0/d8 \
             --lib $ANDROID_JAR \
             --output $DEX_DIR \
-            $CLASSES_DIR
+            $(find $CLASSES_DIR -name "*.class")
 
           echo "=== Step 5: Copy assets ==="
           if [ -d "src/main/assets" ]; then
