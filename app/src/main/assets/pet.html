@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:transparent;width:100vw;height:100vh;overflow:hidden;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;display:flex;align-items:center;justify-content:center}
-
-.pet-container{position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+ body{background:transparent;width:100vw;height:100vh;overflow:hidden;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;display:flex;align-items:flex-start;justify-content:flex-start}
+ 
+ .pet-container{position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
 svg{overflow:visible;pointer-events:none}
 svg *{transition:all 0.2s ease}
 
@@ -24,7 +24,7 @@ svg *{transition:all 0.2s ease}
 .mouth-ouch .mouth-line{display:none}
 .mouth-ouch .mouth-open{display:block}
 
-.bubble{position:absolute;padding:5px 10px;border-radius:12px;font-size:11px;white-space:nowrap;opacity:0;transform:translateY(6px);transition:opacity 0.3s,transform 0.3s;pointer-events:none;z-index:10;bottom:130px;font-family:sans-serif}
+.bubble{position:absolute;padding:4px 8px;border-radius:10px;font-size:10px;white-space:nowrap;opacity:0;transform:translateY(4px);transition:opacity 0.3s,transform 0.3s;pointer-events:none;z-index:10;bottom:60px;font-family:sans-serif}
 .bubble.show{opacity:1;transform:translateY(0)}
 .bubble.normal{background:rgba(255,255,255,0.92);color:#555;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
 .bubble.pink{background:rgba(255,200,200,0.92);color:#C05050;box-shadow:0 2px 8px rgba(255,100,100,0.15)}
@@ -49,7 +49,7 @@ svg *{transition:all 0.2s ease}
 <body>
 <div class="pet-container floating" id="petContainer">
   <div class="bubble" id="bubble"></div>
-  <svg width="200" height="180" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
+  <svg width="60" height="54" viewBox="0 0 300 200" xmlns="http://www.w3.org/2000/svg">
     <rect x="42" y="64" width="18" height="50" rx="9" ry="9" fill="#e68a65"/>
     <rect x="240" y="64" width="18" height="50" rx="9" ry="9" fill="#e68a65"/>
     <rect x="80" y="50" width="140" height="90" rx="14" ry="14" fill="#e68a65"/>
