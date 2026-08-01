@@ -62,7 +62,7 @@ jobs:
           GEN_R=$(find build/gen -name "R.java" 2>/dev/null)
           if [ -n "$SRC_FILES" ]; then
             echo "Compiling Java files..."
-            javac -source 17 -target 17 \
+            javac -source 11 -target 11 \
               -cp $ANDROID_JAR \
               -d $CLASSES_DIR \
               $SRC_FILES $GEN_R
