@@ -11,7 +11,7 @@ import android.view.*
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.webkit.WebSettings
-import androidx.core.app.NotificationCompat
+import android.app.Notification
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -407,7 +407,7 @@ class PetOverlayService : Service() {
             packageManager.getLaunchIntentForPackage(packageName),
             PendingIntent.FLAG_IMMUTABLE
         )
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle("🐾")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
