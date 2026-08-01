@@ -102,7 +102,21 @@ public class PetOverlayService extends Service {
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        overlayView.setWebViewClient(new WebViewClient());
+        overlayView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                pageReady = true;
+                // flush pending events
+                for (String[] evt : pendingEvents) {
+                    if (evt.length == 2) {
+                        showBubble(evt[0], evt[1]);
+                    } else {
+                        tellPet(evt[0]);
+                    }
+                }
+                pendingEvents.clear();
+            }
+        });
         overlayView.setWebChromeClient(new WebChromeClient());
         overlayView.loadUrl("file:///android_asset/pet.html");
         overlayView.setOnTouchListener(createTouchListener());
@@ -117,7 +131,9 @@ public class PetOverlayService extends Service {
     private long lastTapTime = 0L;
     private long touchStartTime = 0L;
     private boolean hasMoved = false;
-    private int tapCount = 0;
+    private boolean pageReady = false;
+    private java.util.List<String[]> pendingEvents = new java.util.ArrayList<>();
+
     private Runnable comboResetRunnable;
 
     private View.OnTouchListener createTouchListener() {
@@ -126,6 +142,7 @@ public class PetOverlayService extends Service {
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
+                        if (!pageReady) return true;
                         initialX = params.x;
                         initialY = params.y;
                         initialTouchX = event.getRawX();
@@ -194,6 +211,10 @@ public class PetOverlayService extends Service {
     }
 
     private void tellPet(String event) {
+        if (!pageReady) {
+            pendingEvents.add(new String[]{event});
+            return;
+        }
         handler.post(new Runnable() {
             @Override
             public void run() {
@@ -204,6 +225,10 @@ public class PetOverlayService extends Service {
     }
 
     private void showBubble(String text, String style) {
+        if (!pageReady) {
+            pendingEvents.add(new String[]{text, style});
+            return;
+        }
         handler.post(new Runnable() {
             @Override
             public void run() {
