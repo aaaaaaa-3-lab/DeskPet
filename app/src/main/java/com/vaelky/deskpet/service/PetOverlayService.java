@@ -133,6 +133,7 @@ public class PetOverlayService extends Service {
     private boolean hasMoved = false;
     private boolean pageReady = false;
     private java.util.List<String[]> pendingEvents = new java.util.ArrayList<>();
+    private int tapCount = 0;
 
     private Runnable comboResetRunnable;
 
