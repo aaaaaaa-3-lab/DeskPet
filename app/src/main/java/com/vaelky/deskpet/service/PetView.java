@@ -44,6 +44,8 @@ public class PetView extends View {
     public interface DragCallback {
         void onDrag(float dx, float dy);
     }
+private DragCallback dragCallback;
+    private Runnable onInteract;
 
     // === 眨眼定时器 ===
     private long nextBlinkMs = 0;
@@ -55,6 +57,9 @@ public class PetView extends View {
         scheduleNextBlink();
     }
 
+    public void setOnInteract(Runnable r) {
+        this.onInteract = r;
+    }
     // ==================== 外部调用（替代pet.trigger/say） ====================
 
     public void triggerPet(String event) {
@@ -126,6 +131,9 @@ public class PetView extends View {
         // 随机选一句
         String text = texts[(int)(Math.random() * texts.length)];
         say(text, style);
+
+        // 通知Service：有交互了
+        if (onInteract != null) onInteract.run();
 
         invalidate();
 
