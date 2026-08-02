@@ -106,6 +106,10 @@ public class PetOverlayService extends Service {
             @Override
             public void onPageFinished(WebView view, String url) {
                 pageReady = true;
+                // Test JS execution
+                view.evaluateJavascript("(function(){ return 'pet_ready'; })()", null);
+                // Test: directly show a bubble on page load
+                showBubble("\u6211\u5728\u8fd9\u513f~", "normal");
                 // flush pending events
                 for (String[] evt : pendingEvents) {
                     if (evt.length == 2) {
