@@ -115,13 +115,10 @@ public class PetOverlayService extends Service {
         @Override
         public void onChange(boolean selfChange, Uri uri) {
             long now = System.currentTimeMillis();
-            if (now - lastShot < 1000) return; // 去抖
+            if (now - lastShot < 2000) return;
             lastShot = now;
-            // 检查路径是否包含screenshot
-            String path = uri != null ? uri.toString().toLowerCase() : "";
-            if (path.contains("screenshot") || path.contains("screenshots")) {
-                handler.post(() -> petView.triggerPet("screenshot"));
-            }
+            // 直接触发，不去过滤路径——截图一定会写MediaStore
+            handler.post(() -> petView.triggerPet("screenshot"));
         }
     }
 
