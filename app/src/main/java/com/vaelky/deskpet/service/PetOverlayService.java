@@ -50,9 +50,6 @@ public class PetOverlayService extends Service {
     private long lastWaterReminderMs = 0;
     private static final long WATER_INTERVAL = 45 * 60 * 1000; // 45分钟提醒一次
 
-    // 通知碎念
-    private NotificationListener notificationListener;
-
     @Override
     public void onCreate() {
         super.onCreate();
