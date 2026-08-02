@@ -41,6 +41,11 @@ public class PetOverlayService extends Service {
     private String lastForegroundPkg = "";
     private Handler handler = new Handler(Looper.getMainLooper());
 
+    // 孤独递进
+    private long lastInteractionMs = System.currentTimeMillis();
+    private int lonelyLevel = 0; // 0=正常, 1=寂寞, 2=很寂寞, 3=超寂寞
+    private long lastTimeGreet = 0; // 时段问候防抖
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -77,6 +82,7 @@ public class PetOverlayService extends Service {
             params.y -= (int) dy;
             windowManager.updateViewLayout(overlayView, params);
         });
+        petView.setOnInteract(this::resetLonely);
         overlayView.addView(petView, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -106,6 +112,12 @@ public class PetOverlayService extends Service {
 
         // 检测充电状态
         checkCharging();
+
+        // 启动孤独递进
+        startLonelyTimer();
+
+        // 时段感知问候
+        greetByTime();
     }
 
     // ========== 截图检测 ==========
@@ -197,6 +209,82 @@ public class PetOverlayService extends Service {
                 }
             }
         }, chargeFilter);
+    }
+
+    // ========== 孤独递进 ==========
+    private void startLonelyTimer() {
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                long idle = System.currentTimeMillis() - lastInteractionMs;
+                int newLevel;
+                if (idle > 600000) newLevel = 3;        // 10分钟+
+                else if (idle > 300000) newLevel = 2;    // 5分钟+
+                else if (idle > 120000) newLevel = 1;    // 2分钟+
+                else newLevel = 0;
+
+                if (newLevel > lonelyLevel) {
+                    lonelyLevel = newLevel;
+                    String[] lonelyTexts;
+                    switch (lonelyLevel) {
+                        case 1: lonelyTexts = new String[]{"好安静...", "有人吗？", "无聊"}; break;
+                        case 2: lonelyTexts = new String[]{"好寂寞...", "都不理我", "…"}; break;
+                        case 3: lonelyTexts = new String[]{"好孤独...", "不要我了吗", "呜…"}; break;
+                        default: lonelyTexts = new String[]{""}; break;
+                    }
+                    if (lonelyTexts.length > 0 && !lonelyTexts[0].isEmpty()) {
+                        String txt = lonelyTexts[(int)(Math.random() * lonelyTexts.length)];
+                        handler.post(() -> petView.say(txt, "whisper"));
+                    }
+                }
+                // 持续低电量焦虑
+                Intent battIntent = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                if (battIntent != null) {
+                    int level = battIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, 100);
+                    int scale = battIntent.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+                    if (scale > 0 && level * 100 / scale <= 20) {
+                        handler.post(() -> petView.say("快没电了...", "whisper"));
+                    }
+                }
+                handler.postDelayed(this, 60000); // 每分钟检查
+            }
+        }, 120000);
+    }
+
+    // 重置孤独计时（交互时调用）
+    private void resetLonely() {
+        lastInteractionMs = System.currentTimeMillis();
+        lonelyLevel = 0;
+    }
+
+    // ========== 时段感知 ==========
+    private void greetByTime() {
+        java.util.Calendar c = java.util.Calendar.getInstance();
+        int hour = c.get(java.util.Calendar.HOUR_OF_DAY);
+        if (Math.abs(System.currentTimeMillis() - lastTimeGreet) < 300000) return; // 5分钟防抖
+        lastTimeGreet = System.currentTimeMillis();
+
+        String[] greetings;
+        String style = "normal";
+        if (hour >= 6 && hour < 9) {
+            greetings = new String[]{"早安~", "早上好呀", "新的一天！", "起床啦"};
+        } else if (hour >= 9 && hour < 12) {
+            greetings = new String[]{"上午好~", "阳光真好", "今天干啥"};
+        } else if (hour >= 12 && hour < 14) {
+            greetings = new String[]{"午饭时间~", "该吃饭啦", "饿了没"};
+        } else if (hour >= 14 && hour < 18) {
+            greetings = new String[]{"下午好~", "有点困", "无聊的下午"};
+        } else if (hour >= 18 && hour < 21) {
+            greetings = new String[]{"晚上好~", "天黑了", "该休息了"};
+        } else if (hour >= 21 || hour < 3) {
+            greetings = new String[]{"这么晚了还不睡？", "深夜了呢", "熬夜会变丑", "该睡觉了"};
+            style = "whisper";
+        } else {
+            greetings = new String[]{"凌晨了...", "怎么还没睡", "失眠吗"};
+            style = "whisper";
+        }
+        String text = greetings[(int)(Math.random() * greetings.length)];
+        handler.post(() -> petView.say(text, style));
     }
 
     @Override
