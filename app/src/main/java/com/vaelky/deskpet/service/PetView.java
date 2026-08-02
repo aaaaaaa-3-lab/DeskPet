@@ -62,6 +62,14 @@ public class PetView extends View {
         this.dragCallback = dragCallback;
         setWillNotDraw(false);
         scheduleNextBlink();
+        // 热度衰减心跳：每2秒触发一次onDraw
+        postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (heat > 0) { invalidate(); }
+                postDelayed(this, 2000);
+            }
+        }, 2000);
     }
 
     public void setOnInteract(Runnable r) {
