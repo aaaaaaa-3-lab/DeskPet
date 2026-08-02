@@ -16,9 +16,8 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.view.Gravity;
-import android.view.MotionEvent;
-import android.view.View;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -44,7 +43,6 @@ public class PetOverlayService extends Service {
     private int notificationIndex = 0;
     private long lastMessageTime = 0L;
     private FileObserver screenshotObserver;
-    private boolean pageReady = false;
 
     private static final String CHANNEL_ID = "pet_overlay_channel";
     private static final int NOTIFICATION_ID = 1001;
@@ -62,6 +60,31 @@ public class PetOverlayService extends Service {
         "你有新消息吗", "分我一点注意力", "在看什么", "饿了", "哼唧",
         "不许碰那里", "痒", "你在看谁", "抱抱", "别走"
     };
+
+    // JavaScript interface for HTML to control overlay position
+    public class PetBridge {
+        @JavascriptInterface
+        public void moveOverlay(int dx, int dy) {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    params.x -= dx;
+                    params.y -= dy;
+                    windowManager.updateViewLayout(overlayView, params);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void onGesture(String type, int x, int y) {
+            postGestureLog(type, x, y);
+        }
+
+        @JavascriptInterface
+        public void requestBubble(String text, String style) {
+            // For external triggers like app detection
+        }
+    }
 
     @Override
     public IBinder onBind(Intent intent) { return null; }
@@ -103,100 +126,27 @@ public class PetOverlayService extends Service {
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(true);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        settings.setMediaPlaybackRequiresUserGesture(false);
+
+        // Add JS bridge - pet.html can call PetBridge.moveOverlay() etc.
+        overlayView.addJavascriptInterface(new PetBridge(), "PetBridge");
+
         overlayView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
-                pageReady = true;
-                // Try loadUrl instead of evaluateJavascript
-                view.loadUrl("javascript:window.pet && window.pet.say('我在这儿~','normal')");
+                // Page loaded - pet.html handles its own interactions
             }
         });
         overlayView.setWebChromeClient(new WebChromeClient());
         overlayView.loadUrl("file:///android_asset/pet.html");
-        overlayView.setOnTouchListener(createTouchListener());
+
+        // NO setOnTouchListener - let pet.html handle all touches natively
+        // PetBridge.moveOverlay() handles drag via JS calls
 
         windowManager.addView(overlayView, params);
     }
 
-    private int initialX = 0;
-    private int initialY = 0;
-    private float initialTouchX = 0f;
-    private float initialTouchY = 0f;
-    private long lastTapTime = 0L;
-    private long touchStartTime = 0L;
-    private boolean hasMoved = false;
-    private int tapCount = 0;
-
-    private Runnable comboResetRunnable;
-
-    private View.OnTouchListener createTouchListener() {
-        return new View.OnTouchListener() {
-            @Override
-            public boolean onTouch(View v, MotionEvent event) {
-                switch (event.getAction()) {
-                    case MotionEvent.ACTION_DOWN:
-                        initialX = params.x;
-                        initialY = params.y;
-                        initialTouchX = event.getRawX();
-                        initialTouchY = event.getRawY();
-                        touchStartTime = System.currentTimeMillis();
-                        hasMoved = false;
-                        return true;
-                    case MotionEvent.ACTION_MOVE:
-                        int dx = (int) (event.getRawX() - initialTouchX);
-                        int dy = (int) (event.getRawY() - initialTouchY);
-                        if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-                            hasMoved = true;
-                            params.x = initialX - dx;
-                            params.y = initialY - dy;
-                            windowManager.updateViewLayout(overlayView, params);
-                        }
-                        return true;
-                    case MotionEvent.ACTION_UP:
-                        long elapsed = System.currentTimeMillis() - touchStartTime;
-                        if (!hasMoved) {
-                            if (elapsed > 600) {
-                                onLongPress();
-                                tapCount = 0;
-                            } else if (System.currentTimeMillis() - lastTapTime < 400) {
-                                tapCount++;
-                                if (comboResetRunnable != null) handler.removeCallbacks(comboResetRunnable);
-                                handler.postDelayed(comboResetRunnable = new Runnable() {
-                                    @Override
-                                    public void run() {
-                                        if (tapCount >= 8) {
-                                            tellPet("comboX8");
-                                        } else if (tapCount >= 5) {
-                                            tellPet("comboX5");
-                                        } else if (tapCount >= 3) {
-                                            tellPet("comboX3");
-                                        } else {
-                                            tellPet("doubleTap");
-                                        }
-                                        tapCount = 0;
-                                    }
-                                }, 600);
-                            } else {
-                                tapCount = 1;
-                                lastTapTime = System.currentTimeMillis();
-                                tellPet("tap");
-                            }
-                        }
-                        if (hasMoved) {
-                            postGestureLog("drag", params.x, params.y);
-                        }
-                        return true;
-                }
-                return false;
-            }
-        };
-    }
-
-    private void onLongPress() {
-        tellPet("longPress");
-        postGestureLog("long_press", params.x, params.y);
-    }
-
+    // Called from outside (app detection, screenshot) to trigger pet reactions
     private void tellPet(String event) {
         handler.post(new Runnable() {
             @Override
@@ -206,7 +156,6 @@ public class PetOverlayService extends Service {
                 }
             }
         });
-        postGestureLog(event, params.x, params.y);
     }
 
     private void showBubble(String text, String style) {
