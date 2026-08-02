@@ -31,6 +31,14 @@ public class PetView extends View {
     private long bubbleStartMs = 0;
     private static final long BUBBLE_DURATION = 2800;
 
+    // === Heat热度系统 ===
+    private int heat = 0;           // 0-100，越戳越热
+    private long lastHeatDecayMs = 0; // 热度衰减计时
+    private float bodyTint = 0f;    // 0=正常暖粉, 1=羞红
+
+    // === 自言自语 ===
+    private long nextMurmurMs = 0;   // 下次自言自语时间
+
     // === 触摸（单击/双击/长按/连击） ===
     private int tapCount = 0;
     private long lastTapMs = 0;
@@ -130,6 +138,24 @@ public class PetView extends View {
         // 随机选一句
         String text = texts[(int)(Math.random() * texts.length)];
         say(text, style);
+
+        // 热度升温
+        lastHeatDecayMs = System.currentTimeMillis();
+        int heatDelta;
+        switch (event) {
+            case "tap": heatDelta = 5; break;
+            case "doubleTap": heatDelta = 12; break;
+            case "longPress": heatDelta = 20; break;
+            case "comboX3": heatDelta = 25; break;
+            case "comboX5": heatDelta = 35; break;
+            case "comboX8": heatDelta = 50; break;
+            case "screenshot": heatDelta = 15; break;
+            default: heatDelta = 3; break;
+        }
+        heat = Math.min(100, heat + heatDelta);
+        // 热度影响外观：高温时身体变红
+        if (heat >= 80) { bodyTint = 0xFF; }        // 满红
+        else if (heat >= 50) { bodyTint = heat / 100f; }  // 渐红
 
         // 通知Service：有交互了
         if (onInteract != null) onInteract.run();
@@ -240,7 +266,18 @@ public class PetView extends View {
         canvas.translate(-cx, -cy);
 
         // 颜色定义（1:1对应SVG）
-        int bodyColor = 0xFFe68a65;   // #e68a65 暖粉色身体
+        // 热度衰减：每秒降温2点
+        if (heat > 0 && now - lastHeatDecayMs > 1000) {
+            heat = Math.max(0, heat - 2);
+            lastHeatDecayMs = now;
+            bodyTint = heat >= 80 ? 1f : (heat >= 50 ? heat / 100f : 0f);
+            invalidate();
+        }
+        // 颜色定义
+        int bodyRed = 0xE6 + (int)((0xFF - 0xE6) * bodyTint);
+        int bodyGreen = (int)(0x8A * (1 - bodyTint * 0.6f));
+        int bodyBlue = (int)(0x65 * (1 - bodyTint * 0.5f));
+        int bodyColor = 0xFF000000 | (bodyRed << 16) | (bodyGreen << 8) | bodyBlue; // 暖粉→羞红
         int footColor = 0xFFd47952;   // #d47952 深一点的四只脚
         int eyeColor = 0xFF1a1a1a;    // 黑色眼睛
         int eyeHighlight = 0xFFFFFFFF; // 白色高光
@@ -319,6 +356,18 @@ public class PetView extends View {
         // --- 气泡（独立于pet变换）---
         if (!bubbleText.isEmpty()) {
             drawBubble(canvas, w, h);
+        }
+
+        // === 自言自语 ===
+        if (bubbleText.isEmpty() && heat < 30 && now >= nextMurmurMs) {
+            nextMurmurMs = now + 15000 + (long)(Math.random() * 30000); // 15-45秒一次
+            final String[] murrs = {
+                "今天天气不错呢", "好无聊啊", "想出去玩", "宝贝在干嘛呢",
+                "肚子饿了", "有点困了", "好想被戳", "……", "哼",
+                "好安静", "发呆中", "看看窗外", "想喝奶茶"
+            };
+            final String murr = murrs[(int)(Math.random() * murrs.length)];
+            say(murr, "whisper");
         }
     }
 
