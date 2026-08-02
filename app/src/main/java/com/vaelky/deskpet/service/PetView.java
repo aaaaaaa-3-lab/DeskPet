@@ -40,12 +40,11 @@ public class PetView extends View {
     private Runnable pendingTap = null;
     private Runnable pendingLongPress = null;
     private DragCallback dragCallback;
+    private Runnable onInteract;
 
     public interface DragCallback {
         void onDrag(float dx, float dy);
     }
-private DragCallback dragCallback;
-    private Runnable onInteract;
 
     // === 眨眼定时器 ===
     private long nextBlinkMs = 0;
