@@ -168,7 +168,7 @@ public class PetOverlayService extends Service {
                     }
                     if (topPkg != null && !topPkg.equals(lastForegroundPkg) && !topPkg.equals(getPackageName())) {
                         lastForegroundPkg = topPkg;
-                        String appName = getAppName(topPkg);
+                        final String appName = getAppName(topPkg);
                         handler.post(() -> petView.say("在看" + appName + "？", "whisper"));
                     }
                 }
@@ -225,7 +225,7 @@ public class PetOverlayService extends Service {
 
                 if (newLevel > lonelyLevel) {
                     lonelyLevel = newLevel;
-                    String[] lonelyTexts;
+                    final String[] lonelyTexts;
                     switch (lonelyLevel) {
                         case 1: lonelyTexts = new String[]{"好安静...", "有人吗？", "无聊"}; break;
                         case 2: lonelyTexts = new String[]{"好寂寞...", "都不理我", "…"}; break;
@@ -233,7 +233,7 @@ public class PetOverlayService extends Service {
                         default: lonelyTexts = new String[]{""}; break;
                     }
                     if (lonelyTexts.length > 0 && !lonelyTexts[0].isEmpty()) {
-                        String txt = lonelyTexts[(int)(Math.random() * lonelyTexts.length)];
+                        final String txt = lonelyTexts[(int)(Math.random() * lonelyTexts.length)];
                         handler.post(() -> petView.say(txt, "whisper"));
                     }
                 }
@@ -265,17 +265,22 @@ public class PetOverlayService extends Service {
         lastTimeGreet = System.currentTimeMillis();
 
         String[] greetings;
-        String style = "normal";
+        final String style;
         if (hour >= 6 && hour < 9) {
             greetings = new String[]{"早安~", "早上好呀", "新的一天！", "起床啦"};
+            style = "normal";
         } else if (hour >= 9 && hour < 12) {
             greetings = new String[]{"上午好~", "阳光真好", "今天干啥"};
+            style = "normal";
         } else if (hour >= 12 && hour < 14) {
             greetings = new String[]{"午饭时间~", "该吃饭啦", "饿了没"};
+            style = "normal";
         } else if (hour >= 14 && hour < 18) {
             greetings = new String[]{"下午好~", "有点困", "无聊的下午"};
+            style = "normal";
         } else if (hour >= 18 && hour < 21) {
             greetings = new String[]{"晚上好~", "天黑了", "该休息了"};
+            style = "normal";
         } else if (hour >= 21 || hour < 3) {
             greetings = new String[]{"这么晚了还不睡？", "深夜了呢", "熬夜会变丑", "该睡觉了"};
             style = "whisper";
@@ -283,7 +288,7 @@ public class PetOverlayService extends Service {
             greetings = new String[]{"凌晨了...", "怎么还没睡", "失眠吗"};
             style = "whisper";
         }
-        String text = greetings[(int)(Math.random() * greetings.length)];
+        final String text = greetings[(int)(Math.random() * greetings.length)];
         handler.post(() -> petView.say(text, style));
     }
 
