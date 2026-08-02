@@ -46,6 +46,13 @@ public class PetOverlayService extends Service {
     private int lonelyLevel = 0; // 0=正常, 1=寂寞, 2=很寂寞, 3=超寂寞
     private long lastTimeGreet = 0; // 时段问候防抖
 
+    // 喝水提醒
+    private long lastWaterReminderMs = 0;
+    private static final long WATER_INTERVAL = 45 * 60 * 1000; // 45分钟提醒一次
+
+    // 通知碎念
+    private NotificationListener notificationListener;
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -118,6 +125,12 @@ public class PetOverlayService extends Service {
 
         // 时段感知问候
         greetByTime();
+
+        // 喝水提醒
+        startWaterReminder();
+
+        // 通知碎念（需要NotificationListenerService权限，简化版：定时检测通知栏）
+        startNotificationMonitor();
     }
 
     // ========== 截图检测 ==========
@@ -290,6 +303,57 @@ public class PetOverlayService extends Service {
         }
         final String text = greetings[(int)(Math.random() * greetings.length)];
         handler.post(() -> petView.say(text, style));
+    }
+
+    // ========== 喝水提醒 ==========
+    private void startWaterReminder() {
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                final String[] waterTexts = {
+                    "该喝水啦~", "多喝热水", "补水时间！", "渴了没？", "喝水喝水！", "来一口水"
+                };
+                final String txt = waterTexts[(int)(Math.random() * waterTexts.length)];
+                petView.say(txt, "pink");
+                handler.postDelayed(this, WATER_INTERVAL);
+            }
+        }, WATER_INTERVAL);
+    }
+
+    // ========== 通知碎念 ==========
+    private void startNotificationMonitor() {
+        // 简化版：用ContentObserver监听通知栏变化（需要权限，这里用定时轮询备选）
+        // 实际通过监听NotificationManager（需反射或AccessibilityService）
+        // 这里用轻量方案：检测是否有新通知通过日志
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    // 尝试通过dumpsys notification轻量检测
+                    java.io.BufferedReader br = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(
+                            Runtime.getRuntime().exec(new String[]{"dumpsys", "notification", "--noredact"}).getInputStream()));
+                    String line;
+                    int notifCount = 0;
+                    boolean foundRecent = false;
+                    while ((line = br.readLine()) != null && !foundRecent) {
+                        if (line.contains("NotificationRecord") && line.contains("postTime")) {
+                            notifCount++;
+                            if (notifCount <= 2) foundRecent = true;
+                        }
+                    }
+                    br.close();
+                    if (foundRecent && notifCount > 0) {
+                        final String[] notifTexts = {
+                            "好像有消息", "谁找你？", "有新通知哦", "看看手机", "消息来啦"
+                        };
+                        final String txt = notifTexts[(int)(Math.random() * notifTexts.length)];
+                        handler.post(() -> petView.say(txt, "whisper"));
+                    }
+                } catch (Exception ignore) {}
+                handler.postDelayed(this, 120000); // 每2分钟检查
+            }
+        }, 60000);
     }
 
     @Override
