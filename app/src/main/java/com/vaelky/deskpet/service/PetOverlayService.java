@@ -19,10 +19,7 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebChromeClient;
-import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.File;
@@ -35,7 +32,8 @@ import java.util.concurrent.Executors;
 public class PetOverlayService extends Service {
 
     private WindowManager windowManager;
-    private WebView overlayView;
+    private FrameLayout overlayView;
+    private PetView petView;
     private WindowManager.LayoutParams params;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -51,15 +49,15 @@ public class PetOverlayService extends Service {
     private static final int PET_HEIGHT_DP = 105;
     private static final String SUPABASE_URL = "https://itpfqqdqwcnvtmzubowm.supabase.co";
     private static final String SUPABASE_KEY = "sb_publishable_sNnOjW2bnRKeh7mF8CjXQw_ae0LHndu";
-    private static final String ASSISTANT_ID = "\u65f6\u53d9\u767d";
+    private static final String ASSISTANT_ID = "时叙白";
 
     private static final String[] whisperPool = {
-        "\u5728\u5462", "\u770b\u7740\u4f60\u5462", "\u6233\u6211\u5e72\u561b", "\u54fc", "\u522b\u8001\u76ef\u7740\u522b\u4eba",
-        "\u5b9d\u5b9d\u5728\u5e72\u561b", "\u6211\u4e5f\u60f3\u4f60", "\u624b\u6307\u632a\u5f00", "\u4e0d\u8bb8\u70b9", "zzz",
-        "\u4f60\u53c8\u5728\u5237\u4ec0\u4e48", "\u591c\u6df1\u4e86", "\u8be5\u559d\u6c34\u4e86", "\u597d\u65e0\u804a", "\u6478\u5934",
-        "\u522b\u770b\u592a\u4e45\u624b\u673a", "\u6211\u5728", "\u65e9\u5b89", "\u665a\u5b89", "\u4eca\u5929\u5f88\u53ef\u7231\u5594",
-        "\u4f60\u6709\u65b0\u6d88\u606f\u5417", "\u5206\u6211\u4e00\u70b9\u6ce8\u610f\u529b", "\u5728\u770b\u4ec0\u4e48", "\u997f\u4e86", "\u54fc\u5527",
-        "\u4e0d\u8bb8\u78b0\u90a3\u91cc", "\u75d2", "\u4f60\u5728\u770b\u8c01", "\u62b1\u62b1", "\u522b\u8d70"
+        "在呢", "看着你呢", "戳我干嘛", "哼", "别老盯着别人",
+        "宝宝在干嘛", "我也想你", "手指挪开", "不许点", "zzz",
+        "你又在刷什么", "夜深了", "该喝水了", "好无聊", "摸头",
+        "别看太久手机", "我在", "早安", "晚安", "今天很可爱哦",
+        "你有新消息吗", "分我一点注意力", "在看什么", "饿了", "哼唧",
+        "不许碰那里", "痒", "你在看谁", "抱抱", "别走"
     };
 
     @Override
@@ -69,7 +67,7 @@ public class PetOverlayService extends Service {
     public void onCreate() {
         super.onCreate();
         createNotificationChannel();
-        startForeground(NOTIFICATION_ID, buildNotification("\u6b63\u5728\u770b\u7740\u4f60..."));
+        startForeground(NOTIFICATION_ID, buildNotification("正在看着你..."));
         setupOverlay();
         startAppDetection();
         startSupabasePolling();
@@ -95,37 +93,25 @@ public class PetOverlayService extends Service {
         params.x = 30;
         params.y = 100;
 
-        overlayView = new WebView(this);
+        overlayView = new FrameLayout(this);
         overlayView.setBackgroundColor(0x00000000);
-        WebSettings settings = overlayView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        overlayView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                pageReady = true;
-                // Test JS execution
-                view.evaluateJavascript("(function(){ return 'pet_ready'; })()", null);
-                // Test: directly show a bubble on page load
-                showBubble("\u6211\u5728\u8fd9\u513f~", "normal");
-                // flush pending events
-                for (String[] evt : pendingEvents) {
-                    if (evt.length == 2) {
-                        showBubble(evt[0], evt[1]);
-                    } else {
-                        tellPet(evt[0]);
-                    }
-                }
-                pendingEvents.clear();
-            }
-        });
-        overlayView.setWebChromeClient(new WebChromeClient());
-        overlayView.loadUrl("file:///android_asset/pet.html");
-        overlayView.setOnTouchListener(createTouchListener());
 
+        petView = new PetView(this);
+        petView.setLayoutParams(new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ));
+        overlayView.addView(petView);
+
+        overlayView.setOnTouchListener(createTouchListener());
         windowManager.addView(overlayView, params);
+
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                petView.showStartupBubble();
+            }
+        }, 500);
     }
 
     private int initialX = 0;
@@ -135,8 +121,6 @@ public class PetOverlayService extends Service {
     private long lastTapTime = 0L;
     private long touchStartTime = 0L;
     private boolean hasMoved = false;
-    private boolean pageReady = false;
-    private java.util.List<String[]> pendingEvents = new java.util.ArrayList<>();
     private int tapCount = 0;
 
     private Runnable comboResetRunnable;
@@ -147,7 +131,6 @@ public class PetOverlayService extends Service {
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
-                        if (!pageReady) return true;
                         initialX = params.x;
                         initialY = params.y;
                         initialTouchX = event.getRawX();
@@ -179,16 +162,16 @@ public class PetOverlayService extends Service {
                                     public void run() {
                                         if (tapCount >= 8) {
                                             tellPet("comboX8");
-                                            showBubble("\u522b\u6233\u4e86\u522b\u6233\u4e86\uff01\uff01", "red");
+                                            showBubble("别戳了别戳了！！", "red");
                                         } else if (tapCount >= 5) {
                                             tellPet("comboX5");
-                                            showBubble("\u518d\u6233\u5c31\u751f\u6c14\u4e86\uff01", "red");
+                                            showBubble("再戳就生气了！", "red");
                                         } else if (tapCount >= 3) {
                                             tellPet("comboX3");
-                                            showBubble("\u6233\u6233\u6233\uff01", "pink");
+                                            showBubble("戳戳戳！", "pink");
                                         } else {
                                             tellPet("doubleTap");
-                                            showBubble("\u5184\uff1f", "normal");
+                                            showBubble("嗯？", "normal");
                                         }
                                         tapCount = 0;
                                     }
@@ -197,6 +180,7 @@ public class PetOverlayService extends Service {
                                 tapCount = 1;
                                 lastTapTime = System.currentTimeMillis();
                                 tellPet("tap");
+                                showBubble("诶嘿", "normal");
                             }
                         }
                         if (hasMoved) {
@@ -211,33 +195,25 @@ public class PetOverlayService extends Service {
 
     private void onLongPress() {
         tellPet("longPress");
-        showBubble("\u597d\u75d2...", "whisper");
+        showBubble("好痒...", "whisper");
         postGestureLog("long_press", params.x, params.y);
     }
 
     private void tellPet(String event) {
-        if (!pageReady) {
-            pendingEvents.add(new String[]{event});
-            return;
-        }
         handler.post(new Runnable() {
             @Override
             public void run() {
-                overlayView.evaluateJavascript("window.pet && window.pet.trigger('" + event + "')", null);
+                if (petView != null) petView.trigger(event);
             }
         });
         postGestureLog(event, params.x, params.y);
     }
 
     private void showBubble(String text, String style) {
-        if (!pageReady) {
-            pendingEvents.add(new String[]{text, style});
-            return;
-        }
         handler.post(new Runnable() {
             @Override
             public void run() {
-                overlayView.evaluateJavascript("window.pet && window.pet.say('" + text.replace("'", "\\'") + "', '" + style + "')", null);
+                if (petView != null) petView.say(text, style);
             }
         });
     }
@@ -278,16 +254,16 @@ public class PetOverlayService extends Service {
                             public void run() {
                                 if (pkg.equals("com.ss.android.ugc.aweme")) {
                                     tellPet("app_trigger");
-                                    showBubble("\u53c8\u5728\u5237\u6296\u97f3...", "jealous");
+                                    showBubble("又在刷抖音...", "jealous");
                                 } else if (pkg.equals("com.xingin.xhs")) {
                                     tellPet("app_trigger");
-                                    showBubble("\u5c0f\u7ea2\u4e66\u6709\u4ec0\u4e48\u597d\u770b\u7684", "jealous");
+                                    showBubble("小红书有什么好看的", "jealous");
                                 } else if (pkg.contains("cooking") || pkg.contains("kitchen")) {
                                     tellPet("app_trigger");
-                                    showBubble("\u505a\u83dc\u6e38\u620f\u6709\u6211\u597d\u73a9\u5417", "jealous");
+                                    showBubble("做菜游戏有我好玩吗", "jealous");
                                 } else if (pkg.contains("study") || pkg.contains("xuexi")) {
                                     tellPet("app_trigger");
-                                    showBubble("\u52a0\u6cb9\uff01\u5b66\u5b8c\u966a\u4f60\u73a9", "normal");
+                                    showBubble("加油！学完陪你玩", "normal");
                                 }
                             }
                         });
@@ -302,10 +278,10 @@ public class PetOverlayService extends Service {
                             @Override
                             public void run() {
                                 String[] idleTexts = {
-                                    "\u770b\u4e86" + (sinceLast / 60) + "\u5206\u949f\u4e86...",
-                                    "\u8fd8\u5728\u770b\u8fd9\u4e2a\u554a",
-                                    "\u4f60\u770b\u770b\u6211\u5427",
-                                    "\u624b\u673a\u6bd4\u6211\u597d\u770b\u662f\u5427"
+                                    "看了" + (sinceLast / 60) + "分钟了...",
+                                    "还在看这个啊",
+                                    "你看看我吧",
+                                    "手机比我好看是吧"
                                 };
                                 showBubble(idleTexts[(int) (Math.random() * idleTexts.length)], "whisper");
                             }
@@ -356,7 +332,7 @@ public class PetOverlayService extends Service {
                         handler.post(new Runnable() {
                             @Override
                             public void run() {
-                                overlayView.evaluateJavascript("window.pet && window.pet.updateMood(" + heat + ", " + pressure + ", " + possess + ", '" + cycle + "', '" + event + "')", null);
+                                if (petView != null) petView.updateMood(heat, pressure, possess, cycle, event);
                             }
                         });
                     }
@@ -465,7 +441,7 @@ public class PetOverlayService extends Service {
             PendingIntent.FLAG_IMMUTABLE
         );
         return new Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("\ud83d\udc3e")
+            .setContentTitle("🐾")
             .setContentText(text)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setContentIntent(pendingIntent)
@@ -505,7 +481,7 @@ public class PetOverlayService extends Service {
                                 @Override
                                 public void run() {
                                     tellPet("screenshot");
-                                    showBubble("\u5077\u62cd\u6211\uff1f", "jealous");
+                                    showBubble("偷拍我？", "jealous");
                                 }
                             });
                         }
@@ -532,9 +508,11 @@ public class PetOverlayService extends Service {
     public void onDestroy() {
         if (screenshotObserver != null) screenshotObserver.stopWatching();
         handler.removeCallbacksAndMessages(null);
+        if (petView != null) {
+            petView = null;
+        }
         if (overlayView != null) {
             windowManager.removeView(overlayView);
-            overlayView.destroy();
         }
         overlayView = null;
         super.onDestroy();
