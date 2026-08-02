@@ -220,8 +220,8 @@ public class PetView extends View {
         }
 
         float textWidth = textPaint.measureText(currentBubble);
-        float bubbleW = Math.max(textWidth + 24 * density, 60 * density);
-        float bubbleH = 32 * density;
+        float bubbleW = Math.max(textWidth + 32 * density, 70 * density);
+        float bubbleH = 38 * density;
         float bubbleLeft = anchorX - bubbleW / 2f;
         float bubbleTop = anchorY - bubbleH;
 
@@ -244,9 +244,10 @@ public class PetView extends View {
         canvas.drawPath(pointer, bubblePaint);
         canvas.drawPath(pointer, bubbleBorderPaint);
 
-        // Text
+        // Text - center vertically using text bounds
         float textX = bubbleLeft + (bubbleW - textWidth) / 2f;
-        float textY = bubbleTop + bubbleH / 2f + textPaint.getTextSize() / 3f;
+        Paint.FontMetrics fm = textPaint.getFontMetrics();
+        float textY = bubbleTop + (bubbleH - (fm.descent - fm.ascent)) / 2f - fm.ascent;
         canvas.drawText(currentBubble, textX, textY, textPaint);
     }
 
