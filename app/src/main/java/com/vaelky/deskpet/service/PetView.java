@@ -193,13 +193,18 @@ public class PetView extends View {
 
         int w = getWidth();
         int h = getHeight();
-        // SVG viewBox: 0 0 300 200，视口尺寸60x54（CSS里svg width=60 height=54）
-        // 缩放使宠物在View中心偏下
-        float scale = Math.min(w / 70f, h / 64f); // 留气泡空间
-        float petW = 300 * scale;
-        float petH = 200 * scale;
+        // SVG实际渲染尺寸 60x54（来自 pet.html: <svg width="60" height="54" viewBox="0 0 300 200">）
+        // viewBox比例: 300:200 = 3:2
+        // 我们按宽度60dp来缩放，高度自动按比例
+        float density = getResources().getDisplayMetrics().density;
+        float petDisplayW = 60 * density;
+        float petDisplayH = 54 * density;
+        float scale = petDisplayW / 300f; // viewBox 300 → 60dp
+        float petW = petDisplayW;
+        float petH = petDisplayH;
+        // 居中偏上（底部留气泡空间）
         float offsetX = (w - petW) / 2f;
-        float offsetY = h - petH - 4 * scale; // 底部留脚的空间
+        float offsetY = h * 0.25f; // 宠物在View的25%位置，上方留气泡空间
 
         canvas.save();
         // 动画变换
