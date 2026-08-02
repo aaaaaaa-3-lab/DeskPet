@@ -46,7 +46,7 @@ public class PetOverlayService extends Service {
     private static final String CHANNEL_ID = "pet_overlay_channel";
     private static final int NOTIFICATION_ID = 1001;
     private static final int PET_SIZE_DP = 80;
-    private static final int PET_HEIGHT_DP = 105;
+    private static final int PET_HEIGHT_DP = 160;
     private static final String SUPABASE_URL = "https://itpfqqdqwcnvtmzubowm.supabase.co";
     private static final String SUPABASE_KEY = "sb_publishable_sNnOjW2bnRKeh7mF8CjXQw_ae0LHndu";
     private static final String ASSISTANT_ID = "时叙白";
