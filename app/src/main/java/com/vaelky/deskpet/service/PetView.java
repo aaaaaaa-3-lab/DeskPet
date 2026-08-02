@@ -154,8 +154,8 @@ public class PetView extends View {
         }
         heat = Math.min(100, heat + heatDelta);
         // 热度影响外观：高温时身体变红
-        if (heat >= 80) { bodyTint = 0xFF; }        // 满红
-        else if (heat >= 50) { bodyTint = heat / 100f; }  // 渐红
+        if (heat >= 80) { bodyTint = 1f; }
+        else if (heat >= 50) { bodyTint = heat / 100f; }
 
         // 通知Service：有交互了
         if (onInteract != null) onInteract.run();
