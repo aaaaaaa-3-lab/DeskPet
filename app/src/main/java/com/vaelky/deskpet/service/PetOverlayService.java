@@ -68,8 +68,8 @@ public class PetOverlayService extends Service {
             handler.post(new Runnable() {
                 @Override
                 public void run() {
-                    params.x -= dx;
-                    params.y -= dy;
+                    params.x += dx;
+                    params.y += dy;
                     windowManager.updateViewLayout(overlayView, params);
                 }
             });
@@ -112,7 +112,7 @@ public class PetOverlayService extends Service {
             dpToPx(PET_SIZE_DP),
             dpToPx(PET_HEIGHT_DP),
             type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
         );
         params.gravity = Gravity.BOTTOM | Gravity.END;
