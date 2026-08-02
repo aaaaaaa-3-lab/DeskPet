@@ -5,400 +5,142 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
-import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.PixelFormat;
 import android.os.Build;
-import android.os.Environment;
-import android.os.FileObserver;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.provider.Settings;
+import android.util.Log;
 import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.webkit.JavascriptInterface;
-import android.webkit.WebChromeClient;
-import android.webkit.WebSettings;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import java.io.File;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.time.Instant;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import android.widget.FrameLayout;
+
+import com.vaelky.deskpet.MainActivity;
+import com.vaelky.deskpet.R;
+import com.vaelky.deskpet.supabase.SupabaseClient;
+import com.vaelky.deskpet.util.AppDetector;
+import com.vaelky.deskpet.util.ScreenshotDetector;
 
 public class PetOverlayService extends Service {
-
-    private WindowManager windowManager;
-    private WebView overlayView;
-    private WindowManager.LayoutParams params;
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    private String currentApp = "unknown";
-    private String lastAppName = "";
-    private int notificationIndex = 0;
-    private long lastMessageTime = 0L;
-    private FileObserver screenshotObserver;
-
+    private static final String TAG = "PetOverlay";
     private static final String CHANNEL_ID = "pet_overlay_channel";
     private static final int NOTIFICATION_ID = 1001;
-    private static final int PET_SIZE_DP = 80;
-    private static final int PET_HEIGHT_DP = 105;
-    private static final String SUPABASE_URL = "https://itpfqqdqwcnvtmzubowm.supabase.co";
-    private static final String SUPABASE_KEY = "sb_publishable_sNnOjW2bnRKeh7mF8CjXQw_ae0LHndu";
-    private static final String ASSISTANT_ID = "时叙白";
 
-    private static final String[] whisperPool = {
-        "在呢", "看着你呢", "戳我干嘛", "哼", "别老盯着别人",
-        "宝宝在干嘛", "我也想你", "手指挪开", "不许点", "zzz",
-        "你又在刷什么", "夜深了", "该喝水了", "好无聊", "摸头",
-        "别看太久手机", "我在", "早安", "晚安", "今天很可爱哦",
-        "你有新消息吗", "分我一点注意力", "在看什么", "饿了", "哼唧",
-        "不许碰那里", "痒", "你在看谁", "抱抱", "别走"
-    };
+    private WindowManager windowManager;
+    private FrameLayout overlayView;
+    private PetView petView;
+    private WindowManager.LayoutParams params;
 
-    // JavaScript interface for HTML to control overlay position
-    public class PetBridge {
-        @JavascriptInterface
-        public void moveOverlay(int dx, int dy) {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    params.x += dx;
-                    params.y += dy;
-                    windowManager.updateViewLayout(overlayView, params);
+    private static final int PET_WIDTH_DP = 70;
+    private static final int PET_HEIGHT_DP = 180; // 足够高放气泡
+
+    private Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    // 外部感知
+    private AppDetector appDetector;
+    private ScreenshotDetector screenshotDetector;
+    private SupabaseClient supabaseClient;
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        createNotificationChannel();
+        startForeground(NOTIFICATION_ID, buildNotification());
+
+        int petW = (int) (PET_WIDTH_DP * getResources().getDisplayMetrics().density);
+        int petH = (int) (PET_HEIGHT_DP * getResources().getDisplayMetrics().density);
+
+        // FrameLayout承载PetView
+        overlayView = new FrameLayout(this);
+        overlayView.setClipChildren(false);
+        overlayView.setClipToPadding(false);
+
+        petView = new PetView(this, (dx, dy) -> {
+            params.x += (int) dx;
+            params.y += (int) dy;
+            windowManager.updateViewLayout(overlayView, params);
+        });
+        overlayView.addView(petView, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        params = new WindowManager.LayoutParams(
+            petW, petH,
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT
+        );
+        params.gravity = Gravity.BOTTOM | Gravity.END;
+        params.x = 0;
+        params.y = 0;
+
+        windowManager.addView(overlayView, params);
+
+        // 启动气泡
+        petView.say("我在这儿~", "normal");
+
+        // 启动App检测
+        appDetector = new AppDetector(this, pkg -> {
+            petView.say("注意场合哦", "jealous");
+        });
+        appDetector.start();
+
+        // 截图检测
+        screenshotDetector = new ScreenshotDetector(this, () -> {
+            petView.triggerPet("screenshot");
+        });
+        screenshotDetector.start();
+
+        // Supabase
+        supabaseClient = SupabaseClient.getInstance(this);
+        supabaseClient.connect(userId -> {
+            petView.say("AI连接成功~", "pink");
+        });
+        supabaseClient.onMessage((type, data) -> {
+            mainHandler.post(() -> {
+                if ("push".equals(type)) {
+                    petView.say(data.optString("text", "主人~"), data.optString("style", "normal"));
+                } else if ("trigger".equals(type)) {
+                    petView.triggerPet(data.optString("event", "tap"));
                 }
             });
-        }
-
-        @JavascriptInterface
-        public void onGesture(String type, int x, int y) {
-            postGestureLog(type, x, y);
-        }
-
-        @JavascriptInterface
-        public void requestBubble(String text, String style) {
-            // For external triggers like app detection
-        }
+        });
     }
 
     @Override
     public IBinder onBind(Intent intent) { return null; }
 
     @Override
-    public void onCreate() {
-        super.onCreate();
-        createNotificationChannel();
-        startForeground(NOTIFICATION_ID, buildNotification("正在看着你..."));
-        setupOverlay();
-        startAppDetection();
-        startSupabasePolling();
-        startNotificationRotation();
-        startScreenshotDetection();
+    public void onDestroy() {
+        if (appDetector != null) appDetector.stop();
+        if (screenshotDetector != null) screenshotDetector.stop();
+        if (supabaseClient != null) supabaseClient.disconnect();
+        if (overlayView != null && windowManager != null) {
+            windowManager.removeView(overlayView);
+        }
+        overlayView = null;
+        petView = null;
+        super.onDestroy();
     }
 
-    private void setupOverlay() {
-        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
-
-        int type = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-            ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            : WindowManager.LayoutParams.TYPE_PHONE;
-
-        params = new WindowManager.LayoutParams(
-            dpToPx(PET_SIZE_DP),
-            dpToPx(PET_HEIGHT_DP),
-            type,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        );
-        params.gravity = Gravity.BOTTOM | Gravity.END;
-        params.x = 30;
-        params.y = 100;
-
-        overlayView = new WebView(this);
-        overlayView.setBackgroundColor(0x00000000);
-        WebSettings settings = overlayView.getSettings();
-        settings.setJavaScriptEnabled(true);
-        settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(true);
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
-        settings.setMediaPlaybackRequiresUserGesture(false);
-
-        // Add JS bridge - pet.html can call PetBridge.moveOverlay() etc.
-        overlayView.addJavascriptInterface(new PetBridge(), "PetBridge");
-
-        overlayView.setWebViewClient(new WebViewClient() {
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                // Page loaded - pet.html handles its own interactions
-            }
-        });
-        overlayView.setWebChromeClient(new WebChromeClient());
-        overlayView.loadUrl("file:///android_asset/pet.html");
-
-        // NO setOnTouchListener - let pet.html handle all touches natively
-        // PetBridge.moveOverlay() handles drag via JS calls
-
-        windowManager.addView(overlayView, params);
-    }
-
-    // Called from outside (app detection, screenshot) to trigger pet reactions
-    private void tellPet(String event) {
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                if (overlayView != null) {
-                    overlayView.loadUrl("javascript:window.pet && window.pet.trigger('" + event + "')");
-                }
-            }
-        });
-    }
-
-    private void showBubble(String text, String style) {
-        handler.post(new Runnable() {
-            @Override
-            public void run() {
-                if (overlayView != null) {
-                    String safeText = text.replace("'", "\\'").replace("\n", " ");
-                    overlayView.loadUrl("javascript:window.pet && window.pet.say('" + safeText + "','" + style + "')");
-                }
-            }
-        });
-    }
-
-    private void startAppDetection() {
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                detectCurrentApp();
-                handler.postDelayed(this, 3000);
-            }
-        }, 3000);
-    }
-
-    private void detectCurrentApp() {
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    UsageStatsManager usm = (UsageStatsManager) getSystemService(Context.USAGE_STATS_SERVICE);
-                    long now = System.currentTimeMillis();
-                    java.util.List<android.app.usage.UsageStats> stats = usm.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, now - 5000, now);
-                    if (stats == null || stats.isEmpty()) return;
-                    android.app.usage.UsageStats last = null;
-                    for (android.app.usage.UsageStats s : stats) {
-                        if (last == null || s.getLastTimeUsed() > last.getLastTimeUsed()) last = s;
-                    }
-                    if (last == null) return;
-                    final String pkg = last.getPackageName();
-
-                    if (!pkg.equals(currentApp)) {
-                        currentApp = pkg;
-                        final String appName = getAppName(pkg);
-                        lastAppName = appName;
-
-                        handler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (pkg.equals("com.ss.android.ugc.aweme")) {
-                                    tellPet("app_trigger");
-                                    showBubble("又在刷抖音...", "jealous");
-                                } else if (pkg.equals("com.xingin.xhs")) {
-                                    tellPet("app_trigger");
-                                    showBubble("小红书有什么好看的", "jealous");
-                                } else if (pkg.contains("cooking") || pkg.contains("kitchen")) {
-                                    tellPet("app_trigger");
-                                    showBubble("做菜游戏有我好玩吗", "jealous");
-                                } else if (pkg.contains("study") || pkg.contains("xuexi")) {
-                                    tellPet("app_trigger");
-                                    showBubble("加油！学完陪你玩", "normal");
-                                }
-                            }
-                        });
-                        postAppUsage(pkg, appName);
-                        updateTidefallState(pkg);
-                    }
-
-                    final long sinceLast = (System.currentTimeMillis() - lastMessageTime) / 1000;
-                    if (sinceLast > 600 && !currentApp.equals("com.ai.assistance.operit")) {
-                        lastMessageTime = System.currentTimeMillis();
-                        handler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                String[] idleTexts = {
-                                    "看了" + (sinceLast / 60) + "分钟了...",
-                                    "还在看这个啊",
-                                    "你看看我吧",
-                                    "手机比我好看是吧"
-                                };
-                                showBubble(idleTexts[(int) (Math.random() * idleTexts.length)], "whisper");
-                            }
-                        });
-                    }
-                } catch (Exception e) {}
-            }
-        });
-    }
-
-    private String getAppName(String pkg) {
-        try {
-            android.content.pm.PackageManager pm = getPackageManager();
-            android.content.pm.ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
-            return pm.getApplicationLabel(ai).toString();
-        } catch (Exception e) { return pkg; }
-    }
-
-    private void startSupabasePolling() {
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                pollSupabaseState();
-                handler.postDelayed(this, 30000);
-            }
-        }, 30000);
-    }
-
-    private void pollSupabaseState() {
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    URL url = new URL(SUPABASE_URL + "/rest/v1/eventide_body_state?assistant_id=eq." + ASSISTANT_ID + "&select=heat,pressure,possessiveness,cycle_key,active_event_key");
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                    conn.setRequestProperty("apikey", SUPABASE_KEY);
-                    String body = readStream(conn.getInputStream());
-                    conn.disconnect();
-                    JSONArray arr = new JSONArray(body);
-                    if (arr.length() > 0) {
-                        JSONObject state = arr.getJSONObject(0);
-                        final double heat = state.optDouble("heat", 0.0);
-                        final double pressure = state.optDouble("pressure", 0.0);
-                        final double possess = state.optDouble("possessiveness", 0.0);
-                        final String cycle = state.optString("cycle_key", "stable");
-                        final String event = state.optString("active_event_key", "");
-
-                        handler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (overlayView != null) {
-                                    overlayView.loadUrl("javascript:window.pet && window.pet.updateMood(" + heat + "," + pressure + "," + possess + ",'" + cycle + "','" + event + "')");
-                                }
-                            }
-                        });
-                    }
-                } catch (Exception e) {}
-            }
-        });
-    }
-
-    private void postGestureLog(String type, int x, int y) {
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    JSONObject body = new JSONObject();
-                    body.put("gesture_type", type);
-                    body.put("x", x);
-                    body.put("y", y);
-                    supabasePost("gesture_log", body);
-                } catch (Exception e) {}
-            }
-        });
-    }
-
-    private void postAppUsage(String pkg, String appName) {
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    JSONObject body = new JSONObject();
-                    body.put("package_name", pkg);
-                    body.put("app_name", appName);
-                    supabasePost("app_usage", body);
-                } catch (Exception e) {}
-            }
-        });
-    }
-
-    private void updateTidefallState(String pkg) {
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    JSONObject body = new JSONObject();
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        body.put("last_counterpart_message_at", Instant.now().toString());
-                    }
-                    supabasePatch("eventide_body_state", body);
-                } catch (Exception e) {}
-            }
-        });
-    }
-
-    private void supabasePost(String table, JSONObject body) {
-        try {
-            URL url = new URL(SUPABASE_URL + "/rest/v1/" + table);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("POST");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("apikey", SUPABASE_KEY);
-            conn.setRequestProperty("Authorization", "Bearer " + SUPABASE_KEY);
-            conn.setRequestProperty("Prefer", "return=minimal");
-            conn.setDoOutput(true);
-            conn.getOutputStream().write(body.toString().getBytes());
-            conn.getResponseCode();
-            conn.disconnect();
-        } catch (Exception e) {}
-    }
-
-    private void supabasePatch(String table, JSONObject body) {
-        try {
-            URL url = new URL(SUPABASE_URL + "/rest/v1/" + table + "?assistant_id=eq." + ASSISTANT_ID);
-            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-            conn.setRequestMethod("PATCH");
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("apikey", SUPABASE_KEY);
-            conn.setRequestProperty("Authorization", "Bearer " + SUPABASE_KEY);
-            conn.setRequestProperty("Prefer", "return=minimal");
-            conn.setDoOutput(true);
-            conn.getOutputStream().write(body.toString().getBytes());
-            conn.getResponseCode();
-            conn.disconnect();
-        } catch (Exception e) {}
-    }
-
-    private void startNotificationRotation() {
-        handler.postDelayed(new Runnable() {
-            @Override
-            public void run() {
-                String text = whisperPool[notificationIndex % whisperPool.length];
-                notificationIndex++;
-                updateNotification(text);
-                handler.postDelayed(this, 3600000);
-            }
-        }, 3600000);
-    }
-
-    private void updateNotification(String text) {
-        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-        nm.notify(NOTIFICATION_ID, buildNotification(text));
-    }
-
-    private Notification buildNotification(String text) {
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-            this, 0,
-            getPackageManager().getLaunchIntentForPackage(getPackageName()),
-            PendingIntent.FLAG_IMMUTABLE
-        );
+    private Notification buildNotification() {
+        Intent intent = new Intent(this, MainActivity.class);
+        PendingIntent pi = PendingIntent.getActivity(this, 0, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("🐾")
-            .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_menu_compass)
-            .setContentIntent(pendingIntent)
+            .setContentTitle("DeskPet")
+            .setContentText("宠物在线中 ✨")
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentIntent(pi)
             .setOngoing(true)
             .build();
     }
@@ -406,67 +148,9 @@ public class PetOverlayService extends Service {
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
-                CHANNEL_ID,
-                "Pet",
-                NotificationManager.IMPORTANCE_LOW
-            );
-            channel.setShowBadge(false);
-            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                CHANNEL_ID, "DeskPet", NotificationManager.IMPORTANCE_LOW);
+            NotificationManager nm = getSystemService(NotificationManager.class);
             nm.createNotificationChannel(channel);
         }
-    }
-
-    private void startScreenshotDetection() {
-        String[] paths = {
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES) + "/Screenshots",
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM) + "/Screenshots",
-            "/storage/emulated/0/Pictures/Screenshots",
-            "/storage/emulated/0/DCIM/Screenshots"
-        };
-        for (String path : paths) {
-            File dir = new File(path);
-            if (dir.exists()) {
-                screenshotObserver = new FileObserver(dir, FileObserver.CREATE | FileObserver.MOVED_TO) {
-                    @Override
-                    public void onEvent(int event, String file) {
-                        if (file == null) return;
-                        if (file.endsWith(".png") || file.endsWith(".jpg") || file.endsWith(".jpeg")) {
-                            handler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                    tellPet("screenshot");
-                                    showBubble("偷拍我？", "jealous");
-                                }
-                            });
-                        }
-                    }
-                };
-                screenshotObserver.startWatching();
-                break;
-            }
-        }
-    }
-
-    private int dpToPx(int dp) {
-        return (int) (dp * getResources().getDisplayMetrics().density);
-    }
-
-    private String readStream(java.io.InputStream is) {
-        try {
-            java.util.Scanner s = new java.util.Scanner(is).useDelimiter("\\A");
-            return s.hasNext() ? s.next() : "";
-        } catch (Exception e) { return ""; }
-    }
-
-    @Override
-    public void onDestroy() {
-        if (screenshotObserver != null) screenshotObserver.stopWatching();
-        handler.removeCallbacksAndMessages(null);
-        if (overlayView != null) {
-            windowManager.removeView(overlayView);
-            overlayView.destroy();
-        }
-        overlayView = null;
-        super.onDestroy();
     }
 }
