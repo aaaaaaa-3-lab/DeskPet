@@ -64,52 +64,69 @@ public class PetView extends View {
         blushOn = false;
         mouthOpen = false;
 
+        String[] texts;
+        String style = "normal";
+
         switch (event) {
             case "tap":
                 currentAnim = "bouncing";
-                say("诶嘿", "normal");
+                texts = new String[]{"诶嘿", "嗯？", "戳我干嘛", "别闹~", "哈喽"};
+                style = "normal";
                 break;
             case "doubleTap":
                 currentAnim = "wiggling";
-                say("呀~", "pink");
+                texts = new String[]{"呀~", "干嘛啦", "哎呀", "讨厌", "双击我？"};
+                style = "pink";
                 blushOn = true;
                 break;
             case "longPress":
                 currentAnim = "squishing";
-                say("好痒...", "whisper");
+                texts = new String[]{"好痒...", "别捏了", "痒死了", "松手啦", "唔..."};
+                style = "whisper";
                 blushOn = true;
                 break;
             case "comboX3":
                 currentAnim = "wiggling";
-                say("别戳啦", "pink");
+                texts = new String[]{"别戳啦", "够了够了", "停停停", "啊啊啊"};
+                style = "pink";
                 blushOn = true;
                 break;
             case "comboX5":
                 currentAnim = "squishing";
-                say("呜哇！！", "red");
+                texts = new String[]{"呜哇！！", "要坏了！！", "太用力了！！", "住手啊！！"};
+                style = "red";
                 blushOn = true;
                 mouthOpen = true;
                 break;
             case "comboX8":
                 currentAnim = "bouncing";
-                say("要生气了！！", "red");
+                texts = new String[]{"要生气了！！", "我真生气了！！", "你再戳！！", "爆炸了！！"};
+                style = "red";
                 blushOn = true;
                 mouthOpen = true;
                 break;
             case "screenshot":
                 currentAnim = "squishing";
-                say("偷拍我？", "jealous");
+                texts = new String[]{"偷拍我？", "又截图？", "不准截！", "拍什么拍", "？"};
+                style = "jealous";
                 blushOn = true;
                 break;
             case "charging":
                 currentAnim = "bouncing";
-                say("吃饱饱~", "normal");
+                texts = new String[]{"吃饱饱~", "充电中~", "香香~", "来劲了", "满血复活！"};
+                style = "normal";
                 break;
             default:
                 currentAnim = "bouncing";
-                say("诶嘿", "normal");
+                texts = new String[]{"诶嘿"};
+                style = "normal";
                 break;
         }
+
+        // 随机选一句
+        String text = texts[(int)(Math.random() * texts.length)];
+        say(text, style);
+
         invalidate();
 
         // 自动重置
