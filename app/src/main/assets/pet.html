@@ -131,12 +131,17 @@ svg *{transition:all 0.2s ease}
   }
 
   // === 触摸事件 ===
+  var dragStartX=0,dragStartY=0,lastMoveX=0,lastMoveY=0;
+
   container.addEventListener('touchstart',function(e){
     e.preventDefault();
     isDragging=false;
+    dragStartX=e.touches[0].clientX;
+    dragStartY=e.touches[0].clientY;
+    lastMoveX=dragStartX;
+    lastMoveY=dragStartY;
     clearTimeout(pressTimer);
     pressTimer=setTimeout(function(){
-      // long press
       tapCount=0;clearTimeout(tapTimer);
       doTrigger('longPress');
     },500);
@@ -144,8 +149,19 @@ svg *{transition:all 0.2s ease}
 
   container.addEventListener('touchmove',function(e){
     e.preventDefault();
-    isDragging=true;
-    clearTimeout(pressTimer);
+    var cx=e.touches[0].clientX;
+    var cy=e.touches[0].clientY;
+    var dx=cx-lastMoveX;
+    var dy=cy-lastMoveY;
+    if(Math.abs(cx-dragStartX)>8||Math.abs(cy-dragStartY)>8){
+      isDragging=true;
+      clearTimeout(pressTimer);
+    }
+    if(isDragging && window.PetBridge){
+      window.PetBridge.moveOverlay(-dx,-dy);
+    }
+    lastMoveX=cx;
+    lastMoveY=cy;
   },{passive:false});
 
   container.addEventListener('touchend',function(e){
