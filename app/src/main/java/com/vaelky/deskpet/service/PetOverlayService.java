@@ -60,8 +60,8 @@ public class PetOverlayService extends Service {
         overlayView.setClipToPadding(false);
 
         petView = new PetView(this, (dx, dy) -> {
-            params.x += (int) dx;
-            params.y += (int) dy;
+            params.x -= (int) dx;
+            params.y -= (int) dy;
             windowManager.updateViewLayout(overlayView, params);
         });
         overlayView.addView(petView, new FrameLayout.LayoutParams(
