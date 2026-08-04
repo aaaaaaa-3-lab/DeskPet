@@ -95,7 +95,8 @@ private static final int PET_HEIGHT_DP = 190;
     Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
         ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         : WindowManager.LayoutParams.TYPE_PHONE,
-    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+        | WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH
         | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
     PixelFormat.TRANSLUCENT
 );
