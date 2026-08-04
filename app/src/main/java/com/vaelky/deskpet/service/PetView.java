@@ -52,13 +52,19 @@ public class PetView extends View {
     private DragCallback dragCallback;
     private Runnable onInteract;
 
+    // === 小道具/表情 ===
+    private String props = "";            // "" / "camera" / "heart" / "crown"
+    private int propAnim = 0;             // 道具动画进度 0~100
+    private String face = "normal";       // normal / happy / dizzy / crying / sleepy
+    private long propStartMs = 0;
+
     // === 甩出爬回 (fling) 参数 ===
     private String state = "awake";                  // awake / sleeping / flingOut / flingBack
     private float flingTargetX = 0, flingTargetY = 0;
     private float animTranslateX = 0;
-    private static final float FLING_THRESHOLD = 800f; // px/s
-    private static final long FLING_OUT_MS = 500;
-    private static final long FLING_BACK_MS = 1200;
+    private static final float FLING_THRESHOLD = 400f; // px/s
+private static final long FLING_OUT_MS = 300;
+private static final long FLING_BACK_MS = 800;
 
     public interface DragCallback {
         void onDrag(float dx, float dy);
@@ -270,6 +276,58 @@ public class PetView extends View {
         animScaleY = 1f;
         this.animTranslateX = 0;
 
+        // === fling 状态机 ===
+        if (flingPhaseStartMs != 0) {
+            long phaseDt = now - flingPhaseStartMs;
+            if (flingPhaseStartMs > 0) {
+                // flingOut
+                if (phaseDt < FLING_OUT_MS) {
+                    float ft = (float) phaseDt / FLING_OUT_MS;
+                    animTranslateX = flingTargetX * ft;
+                    animTranslateY = -(1 - ft) * (1 - ft) * 40;
+                    state = "flingOut";
+                    face = "dizzy";
+                } else {
+                    flingPhaseStartMs = -now;
+                    state = "flingBack";
+                    face = "happy";
+                    props = "camera";
+                    propStartMs = now;
+                    say("我回来啦~ 快拍我！", "normal");
+                    invalidate();
+                }
+            } else {
+                // flingBack
+                long backStart = -flingPhaseStartMs;
+                long backDt = now - backStart;
+                if (backDt < FLING_BACK_MS) {
+                    float ft = (float) backDt / FLING_BACK_MS;
+                    animTranslateX = flingTargetX * (1 - ft);
+                    state = "flingBack";
+                    face = ft < 0.5f ? "happy" : "normal";
+                } else {
+                    flingPhaseStartMs = 0;
+                    state = "awake";
+                    currentAnim = "";
+                    flingTargetX = 0;
+                    flingTargetY = 0;
+                    face = "normal";
+                    props = "";
+                    invalidate();
+                }
+            }
+        }
+
+        // 道具动画进度
+        if (props.length() > 0) {
+            propAnim = (int)((now - propStartMs) / 50);
+            if (propAnim > 100) {
+                props = "";
+                propAnim = 0;
+            }
+            invalidate();
+        }
+
         // 甩出爬回：优先根据state计算水平位移
         if (state.equals("flingOut")) {
             applyFlingOut(t);
@@ -379,9 +437,14 @@ public class PetView extends View {
         }
 
         // --- 左眼（SVG: 黑底x=112,w=22 / 高光x=116,w=6 / 眼皮x=108,w=30）---
-        drawEye(canvas, offsetX, offsetY, scale, 112, 72, 22, 28, 4, 116, 76, 6, 8, 108, 86, 30);
+        drawEye(canvas, offsetX, offsetY, scale, 112, 72, 22, 28, 4, 116, 76, 6, 8, 108, 86, 30, face);
         // --- 右眼（SVG: 黑底x=166,w=22 / 高光x=170,w=6 / 眼皮x=162,w=30）---
-        drawEye(canvas, offsetX, offsetY, scale, 166, 72, 22, 28, 4, 170, 76, 6, 8, 162, 86, 30);
+        drawEye(canvas, offsetX, offsetY, scale, 166, 72, 22, 28, 4, 170, 76, 6, 8, 162, 86, 30, face);
+
+        // --- 小道具（画在宠物身前）---
+        if (props.equals("heart")) drawPropHeart(canvas, offsetX, offsetY, petW, scale, propAnim);
+        if (props.equals("crown")) drawPropCrown(canvas, offsetX, offsetY, petW, scale, propAnim);
+        if (props.equals("camera")) drawPropCamera(canvas, offsetX, offsetY, petW, scale, propAnim);
 
         // --- 腮红（SVG: 左cx=100,cy=98,rx=10,ry=5 / 右cx=200,cy=98,rx=10,ry=5）---
         if (blushOn) {
@@ -436,19 +499,110 @@ public class PetView extends View {
     private void drawEye(Canvas canvas, float ox, float oy, float s,
                          float ebX, float ebY, float ebW, float ebH, float ebR,
                          float ehX, float ehY, float ehW, float ehH,
-                         float elX, float elY, float elW) {
+                         float elX, float elY, float elW, String face) {
         // 黑色眼球
         Paint eyeBallPaint = new Paint(); eyeBallPaint.setColor(0xFF1a1a1a); eyeBallPaint.setAntiAlias(true);
-        if (!eyesClosed) {
-            canvas.drawRoundRect(ox + ebX * s, oy + ebY * s, ox + (ebX + ebW) * s, oy + (ebY + ebH) * s, ebR * s, ebR * s, eyeBallPaint);
-            // 白色高光
-            Paint hlPaint = new Paint(); hlPaint.setColor(0xFFFFFFFF); hlPaint.setAntiAlias(true);
-            canvas.drawRoundRect(ox + ehX * s, oy + ehY * s, ox + (ehX + ehW) * s, oy + (ehY + ehH) * s, 3 * s, 3 * s, hlPaint);
+
+        boolean isDizzy = face.equals("dizzy");
+        boolean isHappy = face.equals("happy");
+
+        if (!eyesClosed && !isDizzy) {
+            if (isHappy) {
+                // 眯眼弧线
+                Paint happyLine = new Paint(); happyLine.setColor(0xFF1a1a1a);
+                happyLine.setAntiAlias(true); happyLine.setStyle(Paint.Style.STROKE);
+                happyLine.setStrokeWidth(2.5f * s); happyLine.setStrokeCap(Paint.Cap.ROUND);
+                Path p = new Path();
+                p.moveTo(ox + ebX * s, oy + (ebY + ebH*0.6f) * s);
+                p.quadTo(ox + (ebX + ebW/2) * s, oy + (ebY + ebH*0.2f) * s,
+                         ox + (ebX + ebW) * s, oy + (ebY + ebH*0.6f) * s);
+                canvas.drawPath(p, happyLine);
+            } else {
+                canvas.drawRoundRect(ox + ebX * s, oy + ebY * s, ox + (ebX + ebW) * s,
+                    oy + (ebY + ebH) * s, ebR * s, ebR * s, eyeBallPaint);
+            }
+            if (!isHappy) {
+                Paint hlPaint = new Paint(); hlPaint.setColor(0xFFFFFFFF); hlPaint.setAntiAlias(true);
+                canvas.drawRoundRect(ox + ehX * s, oy + ehY * s, ox + (ehX + ehW) * s,
+                    oy + (ehY + ehH) * s, 3 * s, 3 * s, hlPaint);
+            }
+        } else if (isDizzy) {
+            // XX眼
+            Paint zap = new Paint(); zap.setColor(0xFF1a1a1a); zap.setAntiAlias(true);
+            zap.setStyle(Paint.Style.STROKE); zap.setStrokeWidth(2f * s); zap.setStrokeCap(Paint.Cap.ROUND);
+            float ex = ox + (ebX + ebW/2) * s;
+            float ey = oy + (ebY + ebH/2) * s;
+            float r = ebW * 0.5f * s;
+            canvas.drawLine(ex - r, ey - r, ex + r, ey + r, zap);
+            canvas.drawLine(ex - r, ey + r, ex + r, ey - r, zap);
         }
-        // 眼皮（闭眼时显示）
+
         if (eyesClosed) {
             Paint lidPaint = new Paint(); lidPaint.setColor(0xFF1a1a1a); lidPaint.setAntiAlias(true);
             canvas.drawRoundRect(ox + elX * s, oy + elY * s, ox + (elX + elW) * s, oy + (elY + 5) * s, 2 * s, 2 * s, lidPaint);
+        }
+    }
+
+    // ==== 小道具绘制 ====
+    private void drawPropHeart(Canvas c, float ox, float oy, float pw, float s, int anim) {
+        Paint p = new Paint(); p.setAntiAlias(true);
+        float cx = ox + pw * 0.7f;
+        float cy = oy + 15 * s;
+        float bob = (float) Math.sin(anim * Math.PI / 50) * 5 * s;
+        p.setColor(0xFFFF5A7F);
+        Path heart = new Path();
+        heart.moveTo(cx, cy + 8 * s + bob);
+        heart.cubicTo(cx - 10*s, cy - 4*s + bob, cx - 4*s, cy - 12*s + bob, cx, cy - 3*s + bob);
+        heart.cubicTo(cx + 4*s, cy - 12*s + bob, cx + 10*s, cy - 4*s + bob, cx, cy + 8*s + bob);
+        c.drawPath(heart, p);
+    }
+
+    private void drawPropCrown(Canvas c, float ox, float oy, float pw, float s, int anim) {
+        Paint p = new Paint(); p.setAntiAlias(true);
+        float cx = ox + pw / 2;
+        float cy = oy - 6 * s;
+        float wob = (float) Math.sin(anim * Math.PI / 50) * 2 * s;
+        p.setColor(0xFFFFCC00);
+        Path crown = new Path();
+        crown.moveTo(cx - 20*s, cy + wob);
+        crown.lineTo(cx - 16*s, cy - 8*s + wob);
+        crown.lineTo(cx - 7*s, cy + 2*s + wob);
+        crown.lineTo(cx, cy - 10*s + wob);
+        crown.lineTo(cx + 7*s, cy + 2*s + wob);
+        crown.lineTo(cx + 16*s, cy - 8*s + wob);
+        crown.lineTo(cx + 20*s, cy + wob);
+        crown.close();
+        c.drawPath(crown, p);
+        p.setColor(0xFFE62E6D);
+        c.drawCircle(cx, cy, 3*s, p);
+    }
+
+    private void drawPropCamera(Canvas c, float ox, float oy, float pw, float s, int anim) {
+        // fling 回来时举起小相机拍照
+        Paint p = new Paint(); p.setAntiAlias(true);
+        float cx = ox + pw * 0.72f;   // 相机在宠物侧方
+        float cy = oy + 20 * s;
+        float bob = (float) Math.sin(anim * Math.PI / 40) * 3 * s;
+        // 机身（深灰圆角矩形）
+        p.setColor(0xFF37474F);
+        float wB = 24 * s, hB = 16 * s;
+        c.drawRoundRect(cx - wB/2, cy + bob - hB/2, cx + wB/2, cy + bob + hB/2, 3*s, 3*s, p);
+        // 镜头（外圈）
+        p.setColor(0xFFECF0F1);
+        c.drawCircle(cx, cy + bob, 5*s, p);
+        // 镜头内芯
+        p.setColor(0xFF2C3E50);
+        c.drawCircle(cx, cy + bob, 3*s, p);
+        // 镜头高光
+        p.setColor(0xFFFFFFFF);
+        c.drawCircle(cx - 1*s, cy - 1*s + bob, 1*s, p);
+        // 闪光灯
+        p.setColor(0xFFFFD54F);
+        c.drawCircle(cx + 8*s, cy - 5*s + bob, 1.5f*s, p);
+        // 快门闪光（拍照瞬间）
+        if (anim > 45 && anim < 60) {
+            p.setColor(0x66FFFFFF);
+            c.drawCircle(cx, cy + bob, (anim - 45) * 2 * s, p);
         }
     }
 
@@ -594,41 +748,23 @@ public class PetView extends View {
 
     // ==================== 甩出爬回 (fling) ====================
 
-    private void startFling(float vx, float vy) {
-        isFling = true;
-        isDragging = false;
-        state = "flingOut";
-        // 沿速度方向飞出屏幕
-        float mag = (float) Math.hypot(vx, vy);
-        float nx = vx / (mag == 0 ? 1f : mag);
-        float ny = vy / (mag == 0 ? 1f : mag);
-        float dist = Math.min(400f, mag * 0.25f); // 飞出距离
-        flingTargetX = nx * dist;
-        flingTargetY = ny * dist;
-        animStartMs = System.currentTimeMillis();
-        animDurationMs = FLING_OUT_MS;
-        currentAnim = "flying";
-        say("咻~", "whisper");
-        invalidate();
-        // 飞出结束后自动爬回
-        postDelayed(this::startFlingReturn, FLING_OUT_MS);
-    }
+    private long flingPhaseStartMs = 0; // 0=none, >0=flingOut, <0=flingBack
 
-    private void startFlingReturn() {
-        state = "flingBack";
-        animStartMs = System.currentTimeMillis();
-        animDurationMs = FLING_BACK_MS;
-        currentAnim = "";
-        say("我回来啦~", "normal");
-        invalidate();
-        postDelayed(() -> {
-            state = "awake";
-            currentAnim = "";
-            flingTargetX = 0;
-            flingTargetY = 0;
-            invalidate();
-        }, FLING_BACK_MS);
-    }
+private void startFling(float vx, float vy) {
+    isFling = true;
+    isDragging = false;
+    // 沿速度方向飞出屏幕
+    float mag = (float) Math.hypot(vx, vy);
+    float nx = vx / (mag == 0 ? 1f : mag);
+    float ny = vy / (mag == 0 ? 1f : mag);
+    float dist = Math.min(800f, mag * 0.5f); // 飞出距离翻倍
+    flingTargetX = nx * dist;
+    flingTargetY = ny * dist;
+    flingPhaseStartMs = System.currentTimeMillis(); // 正数：flingOut阶段
+    currentAnim = "flying";
+    say("咻~", "whisper");
+    invalidate();
+}
 
     private void applyFlingOut(float t) {
         animTranslateX = flingTargetX * t;
