@@ -34,7 +34,7 @@ public class PetOverlayService extends Service {
     private WindowManager.LayoutParams params;
 
     private static final int PET_WIDTH_DP = 70;
-    private static final int PET_HEIGHT_DP = 180;
+private static final int PET_HEIGHT_DP = 260;
 
     // 感知模块
     private ScreenshotObserver screenshotObserver;
@@ -91,14 +91,14 @@ public class PetOverlayService extends Service {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         params = new WindowManager.LayoutParams(
-            petW, petH,
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
-                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                : WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        );
+    petW, petH,
+    Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+        ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        : WindowManager.LayoutParams.TYPE_PHONE,
+    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+    PixelFormat.TRANSLUCENT
+);
         params.gravity = Gravity.BOTTOM | Gravity.END;
         params.x = 0;
         params.y = 0;
