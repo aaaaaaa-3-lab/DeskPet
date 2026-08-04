@@ -143,9 +143,19 @@ private static final long FLING_BACK_MS = 800;
                 break;
             case "screenshot":
                 currentAnim = "squishing";
-                texts = new String[]{"偷拍我？", "又截图？", "不准截！", "拍什么拍", "？"};
+                texts = new String[]{"偷拍我？", "又截图？", "不准截！", "拍什么拍", "卡擦！"};
                 style = "jealous";
                 blushOn = true;
+                props = "camera";       // 截图/拍照 → 举相机
+                propStartMs = System.currentTimeMillis();
+                break;
+            case "cooking":
+                currentAnim = "bouncing";
+                texts = new String[]{"点啥外卖，我给你炒！", "起锅烧油~", "颠勺呢", "香不香", "等会儿，我炒个菜"};
+                style = "normal";
+                blushOn = false;
+                props = "wok";          // 开外卖/购物 → 炒菜举锅铲
+                propStartMs = System.currentTimeMillis();
                 break;
             case "charging":
                 currentAnim = "bouncing";
@@ -445,6 +455,7 @@ private static final long FLING_BACK_MS = 800;
         if (props.equals("heart")) drawPropHeart(canvas, offsetX, offsetY, petW, scale, propAnim);
         if (props.equals("crown")) drawPropCrown(canvas, offsetX, offsetY, petW, scale, propAnim);
         if (props.equals("camera")) drawPropCamera(canvas, offsetX, offsetY, petW, scale, propAnim);
+        if (props.equals("wok")) drawPropWok(canvas, offsetX, offsetY, petW, scale, propAnim);
 
         // --- 腮红（SVG: 左cx=100,cy=98,rx=10,ry=5 / 右cx=200,cy=98,rx=10,ry=5）---
         if (blushOn) {
@@ -575,6 +586,38 @@ private static final long FLING_BACK_MS = 800;
         c.drawPath(crown, p);
         p.setColor(0xFFE62E6D);
         c.drawCircle(cx, cy, 3*s, p);
+    }
+
+    private void drawPropWok(Canvas c, float ox, float oy, float pw, float s, int anim) {
+        // 开外卖/购物 → 举锅铲炒菜
+        Paint p = new Paint(); p.setAntiAlias(true);
+        float cx = ox + pw * 0.72f;
+        float cy = oy + 22 * s;
+        // 火焰（先在锅底/侧边晃动）
+        p.setColor(0xFFFF9800);
+        float flick = (float) Math.sin(anim * Math.PI / 15) * 3 * s;
+        c.drawOval(cx - 12*s, cy + 18*s + flick, cx - 4*s, cy + 26*s, p);
+        p.setColor(0xFFFFD54F);
+        c.drawOval(cx - 4*s, cy + 16*s - flick, cx + 3*s, cy + 24*s, p);
+        // 锅（黑色半圆铲）
+        p.setColor(0xFF37474F);
+        c.drawOval(cx - 20*s, cy + 2*s, cx + 6*s, cy + 16*s, p);
+        // 锅铲柄（斜的木柄）
+        p.setColor(0xFF8D6E63);
+        Paint stroke = new Paint(); stroke.setColor(0xFF8D6E63);
+        stroke.setAntiAlias(true); stroke.setStrokeWidth(3*s); stroke.setStrokeCap(Paint.Cap.ROUND);
+        float swing = (float) Math.sin(anim * Math.PI / 10) * 6 * s; // 颠勺摆动
+        c.drawLine(cx + 4*s, cy + 4*s, cx + 22*s, cy - 18*s + swing, stroke);
+        // 锅铲头
+        p.setColor(0xFF616161);
+        c.drawOval(cx + 18*s, cy - 22*s + swing, cx + 26*s, cy - 13*s + swing, p);
+        // 翻起的食物（米饭/菜粒）
+        p.setColor(0xFFFFF59D);
+        for (int i = 0; i < 4; i++) {
+            float bx = cx + (6 + i * 5) * s;
+            float by = cy + (4 - i * 2) * s - Math.abs((float)Math.sin((anim+i*7)*Math.PI/12)) * 10 * s;
+            c.drawCircle(bx, by, 2*s, p);
+        }
     }
 
     private void drawPropCamera(Canvas c, float ox, float oy, float pw, float s, int anim) {
