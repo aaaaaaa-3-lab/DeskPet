@@ -179,8 +179,16 @@ private static final int PET_HEIGHT_DP = 190;
                     }
                     if (topPkg != null && !topPkg.equals(lastForegroundPkg) && !topPkg.equals(getPackageName())) {
                         lastForegroundPkg = topPkg;
-                        final String appName = getAppName(topPkg);
-                        handler.post(() -> petView.say("在看" + appName + "？", "whisper"));
+                        // 美团/淘宝 → 桌宠炒菜
+                        if (topPkg.equals("com.sankuai.meituan")
+                            || topPkg.equals("com.taobao.taobao")
+                            || topPkg.equals("com.sankuai.meituan.dispatch")
+                            || topPkg.equals("com.ele.me")) {
+                            handler.post(() -> petView.triggerPet("cooking"));
+                        } else {
+                            final String appName = getAppName(topPkg);
+                            handler.post(() -> petView.say("在看" + appName + "？", "whisper"));
+                        }
                     }
                 }
             }
