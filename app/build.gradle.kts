@@ -10,8 +10,8 @@ android {
         applicationId = "com.vaelky.deskpet"
         minSdk = 26
         targetSdk = 34
-        versionCode = 12
-        versionName = "4.3"
+        versionCode = 13
+        versionName = "4.4"
     }
 
     buildTypes {
