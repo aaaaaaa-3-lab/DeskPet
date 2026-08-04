@@ -632,8 +632,13 @@ private static final long FLING_BACK_MS = 800;
         float padY = 4 * density;
         float bubbleW = textW + padX * 2;
         float bubbleH = textPaint.getTextSize() + padY * 2;
-        float bubbleX = (w - bubbleW) / 2;
-        float bubbleY = h * 0.15f; // 在宠物上方
+        // 气泡宽度限制在窗口内（不超出左右边界）
+        if (bubbleW > w - 4 * density) bubbleW = w - 4 * density;
+        float bubbleX = (w - bubbleW) / 2f;
+        // 气泡显示在宠物上方，但确保完整在窗口内（留上边距）
+        float bubbleY = h * 0.15f;
+        if (bubbleY + bubbleH > h) bubbleY = h - bubbleH - 2 * density;
+        if (bubbleY < 2 * density) bubbleY = 2 * density;
 
         // 圆角背景
         Paint bgPaint = new Paint();
