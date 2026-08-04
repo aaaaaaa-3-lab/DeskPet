@@ -34,7 +34,7 @@ public class PetOverlayService extends Service {
     private WindowManager.LayoutParams params;
 
     private static final int PET_WIDTH_DP = 70;
-private static final int PET_HEIGHT_DP = 260;
+private static final int PET_HEIGHT_DP = 190;
 
     // 感知模块
     private ScreenshotObserver screenshotObserver;
