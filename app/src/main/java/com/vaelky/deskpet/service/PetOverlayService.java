@@ -216,6 +216,8 @@ public class PetOverlayService extends Service {
             public void onReceive(Context context, Intent intent) {
                 if (Intent.ACTION_POWER_CONNECTED.equals(intent.getAction())) {
                     handler.post(() -> petView.triggerPet("charging"));
+                } else if (Intent.ACTION_POWER_DISCONNECTED.equals(intent.getAction())) {
+                    handler.post(() -> petView.triggerPet("unplug"));
                 }
             }
         }, chargeFilter);
@@ -252,9 +254,18 @@ public class PetOverlayService extends Service {
                 if (battIntent != null) {
                     int level = battIntent.getIntExtra(BatteryManager.EXTRA_LEVEL, 100);
                     int scale = battIntent.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
-                    if (scale > 0 && level * 100 / scale <= 20) {
-                        handler.post(() -> petView.say("快没电了...", "whisper"));
+                    int pct = scale > 0 ? level * 100 / scale : 100;
+                    if (pct <= 20 && pct > 15) {
+                        handler.post(() -> petView.triggerPet("lowbattery"));
+                    } else if (pct <= 15) {
+                        handler.post(() -> petView.triggerPet("lowbattery"));
                     }
+                }
+                // 超久无互动：睡着（README孤独递进终极态）
+                if (idle > 600000 && !petView.isAsleep()) {
+                    handler.post(() -> petView.goToSleep());
+                } else if (idle <= 120000 && petView.isAsleep()) {
+                    handler.post(() -> petView.wake());
                 }
                 handler.postDelayed(this, 60000); // 每分钟检查
             }
