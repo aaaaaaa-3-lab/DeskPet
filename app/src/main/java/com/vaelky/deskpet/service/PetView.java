@@ -620,22 +620,41 @@ private static final long FLING_BACK_MS = 800;
             default:        bgColor = 0xEBFFFFFF; textColor = 0xFF555555; break;
         }
 
+        float density = getResources().getDisplayMetrics().density;
         Paint textPaint = new Paint();
         textPaint.setColor(textColor);
-        textPaint.setTextSize(10 * getResources().getDisplayMetrics().density);
+        textPaint.setTextSize(8 * density); // 字号略小，好放进小窗口
         textPaint.setAntiAlias(true);
         textPaint.setTypeface(Typeface.DEFAULT);
 
-        float textW = textPaint.measureText(text);
-        float density = getResources().getDisplayMetrics().density;
         float padX = 8 * density;
-        float padY = 4 * density;
-        float bubbleW = textW + padX * 2;
-        float bubbleH = textPaint.getTextSize() + padY * 2;
-        // 气泡宽度限制在窗口内（不超出左右边界）
-        if (bubbleW > w - 4 * density) bubbleW = w - 4 * density;
+        float padY = 5 * density;
+        float maxW = w - 4 * density - padX * 2; // 气泡内可写宽度
+        float lineH = textPaint.getTextSize() * 1.3f; // 行高
+
+        // 多行换行：按字符逐个累加，超过 maxW 就换行
+        java.util.List<String> lines = new java.util.ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '\n') {
+                lines.add(cur.toString());
+                cur.setLength(0);
+                continue;
+            }
+            String test = cur.toString() + ch;
+            if (textPaint.measureText(test) > maxW && cur.length() > 0) {
+                lines.add(cur.toString());
+                cur.setLength(0);
+            }
+            cur.append(ch);
+        }
+        if (cur.length() > 0) lines.add(cur.toString());
+
+        int nLines = Math.max(1, lines.size());
+        float bubbleW = maxW + padX * 2;
+        float bubbleH = lineH * nLines + padY * 2;
         float bubbleX = (w - bubbleW) / 2f;
-        // 气泡显示在宠物上方，但确保完整在窗口内（留上边距）
         float bubbleY = h * 0.18f;
         if (bubbleY + bubbleH > h) bubbleY = h - bubbleH - 2 * density;
         if (bubbleY < 2 * density) bubbleY = 2 * density;
@@ -644,13 +663,18 @@ private static final long FLING_BACK_MS = 800;
         Paint bgPaint = new Paint();
         bgPaint.setColor(bgColor);
         bgPaint.setAntiAlias(true);
-        bgPaint.setShadowLayer(8 * density, 0, 2 * density, 0x14000000);
+        bgPaint.setShadowLayer(6 * density, 0, 2 * density, 0x14000000);
         canvas.drawRoundRect(bubbleX, bubbleY, bubbleX + bubbleW, bubbleY + bubbleH, 10 * density, 10 * density, bgPaint);
 
-        // 文字
+        // 多行文字
         Paint.FontMetrics fm = textPaint.getFontMetrics();
-        float textY = bubbleY + (bubbleH - fm.bottom + fm.top) / 2f - fm.top;
-        canvas.drawText(text, bubbleX + padX, textY, textPaint);
+        float textY = bubbleY + padY + lineH - (lineH - (fm.bottom - fm.top)) / 2f - fm.bottom;
+        for (int i = 0; i < nLines; i++) {
+            String line = lines.get(i);
+            float lw = textPaint.measureText(line);
+            float lx = bubbleX + bubbleW / 2f - lw / 2f; // 居中
+            canvas.drawText(line, lx, textY + i * lineH, textPaint);
+        }
     }
 
     // ==================== 触摸 ====================
