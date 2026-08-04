@@ -45,10 +45,20 @@ public class PetView extends View {
     private long touchStartMs = 0;
     private float touchStartX = 0, touchStartY = 0;
     private boolean isDragging = false;
+    private boolean isFling = false;
+    private float dragVelocityX = 0, dragVelocityY = 0;
     private Runnable pendingTap = null;
     private Runnable pendingLongPress = null;
     private DragCallback dragCallback;
     private Runnable onInteract;
+
+    // === 甩出爬回 (fling) 参数 ===
+    private String state = "awake";                  // awake / sleeping / flingOut / flingBack
+    private float flingTargetX = 0, flingTargetY = 0;
+    private float animTranslateX = 0;
+    private static final float FLING_THRESHOLD = 800f; // px/s
+    private static final long FLING_OUT_MS = 500;
+    private static final long FLING_BACK_MS = 1200;
 
     public interface DragCallback {
         void onDrag(float dx, float dy);
@@ -135,6 +145,41 @@ public class PetView extends View {
                 currentAnim = "bouncing";
                 texts = new String[]{"吃饱饱~", "充电中~", "香香~", "来劲了", "满血复活！"};
                 style = "normal";
+                break;
+            case "afk_sleep":
+                currentAnim = "";
+                texts = new String[]{"zzZ…", "Zzz…", "呼…睡着了"};
+                style = "whisper";
+                eyesClosed = true;
+                animDurationMs = 1000;
+                break;
+            case "wakeup":
+                currentAnim = "bouncing";
+                texts = new String[]{"唔…睡饱了", "早呀~", "嘿嘿", "精神满满"};
+                style = "normal";
+                eyesClosed = false;
+                break;
+            case "lowbattery":
+                currentAnim = "squishing";
+                texts = new String[]{"快没电了…", "要撑不住了", "呜呜电量低", "好慌"};
+                style = "whisper";
+                blushOn = true;
+                break;
+            case "yawn":
+                currentAnim = "tilting";
+                texts = new String[]{"哈啊…", "有点困", "想睡了"};
+                style = "whisper";
+                mouthOpen = true;
+                break;
+            case "sigh":
+                currentAnim = "squishing";
+                texts = new String[]{"唉…", "累啊", "叹口气"};
+                style = "whisper";
+                break;
+            case "unplug":
+                currentAnim = "tilting";
+                texts = new String[]{"不充了？", "还没满呢", "唔…"};
+                style = "whisper";
                 break;
             default:
                 currentAnim = "bouncing";
@@ -223,8 +268,17 @@ public class PetView extends View {
         animRotation = 0;
         animScaleX = 1f;
         animScaleY = 1f;
+        this.animTranslateX = 0;
 
-        if (!currentAnim.isEmpty() && t < 1f) {
+        // 甩出爬回：优先根据state计算水平位移
+        if (state.equals("flingOut")) {
+            applyFlingOut(t);
+            animTranslateY = -(1 - t) * (1 - t) * 40; // 抛物线上升
+        } else if (state.equals("flingBack")) {
+            applyFlingBack(t);
+        }
+
+        if (!currentAnim.isEmpty() && t < 1f && state.equals("awake")) {
             switch (currentAnim) {
                 case "bouncing": {
                     float bt = t * 2f; // bounce: quick up, slight overshoot
@@ -268,7 +322,7 @@ public class PetView extends View {
         // 动画变换
         float cx = offsetX + petW / 2;
         float cy = offsetY + petH / 2;
-        canvas.translate(cx, cy + animTranslateY * scale);
+        canvas.translate(cx + animTranslateX, cy + animTranslateY * scale);
         canvas.rotate(animRotation);
         canvas.scale(animScaleX, animScaleY);
         canvas.translate(-cx, -cy);
@@ -367,7 +421,7 @@ public class PetView extends View {
         }
 
         // === 自言自语 ===
-        if (bubbleText.isEmpty() && heat < 30 && now >= nextMurmurMs) {
+        if (bubbleText.isEmpty() && heat < 30 && now >= nextMurmurMs && !state.equals("sleeping")) {
             nextMurmurMs = now + 15000 + (long)(Math.random() * 30000); // 15-45秒一次
             final String[] murrs = {
                 "今天天气不错呢", "好无聊啊", "想出去玩", "宝贝在干嘛呢",
@@ -450,9 +504,17 @@ public class PetView extends View {
         switch (action) {
             case MotionEvent.ACTION_DOWN:
                 isDragging = false;
+                isFling = false;
+                dragVelocityX = 0;
+                dragVelocityY = 0;
                 touchStartX = event.getRawX();
                 touchStartY = event.getRawY();
                 touchStartMs = now;
+
+                // 唤醒沉睡的pet
+                if (state.equals("sleeping")) {
+                    triggerPet("wakeup");
+                }
 
                 // 长按检测
                 postDelayed(() -> {
@@ -467,8 +529,14 @@ public class PetView extends View {
             case MotionEvent.ACTION_MOVE:
                 float dx = event.getRawX() - touchStartX;
                 float dy = event.getRawY() - touchStartY;
+                long moveDt = Math.max(1, System.currentTimeMillis() - touchStartMs);
                 if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
                     isDragging = true;
+                    // 累积甩出速度（px/s）
+                    if (moveDt > 30) {
+                        dragVelocityX = dx * 1000f / moveDt;
+                        dragVelocityY = dy * 1000f / moveDt;
+                    }
                 }
                 if (isDragging && dragCallback != null) {
                     dragCallback.onDrag(dx, dy);
@@ -481,7 +549,16 @@ public class PetView extends View {
 
             case MotionEvent.ACTION_UP:
                 removeCallbacks(null);
-                if (isDragging) { isDragging = false; return true; }
+                if (isDragging) {
+                    // 甩出检测：速度够快则飞出再爬回
+                    float speed = (float) Math.hypot(dragVelocityX, dragVelocityY);
+                    if (speed > FLING_THRESHOLD) {
+                        startFling(dragVelocityX, dragVelocityY);
+                    } else {
+                        isDragging = false;
+                    }
+                    return true;
+                }
 
                 // 单击/双击/连击
                 if (now - lastTapMs < 400 && now - lastTapMs > 0) {
@@ -514,4 +591,67 @@ public class PetView extends View {
     }
 
     private float cubicOut(float t) { return 1 - (float) Math.pow(1 - t, 3); }
+
+    // ==================== 甩出爬回 (fling) ====================
+
+    private void startFling(float vx, float vy) {
+        isFling = true;
+        isDragging = false;
+        state = "flingOut";
+        // 沿速度方向飞出屏幕
+        float mag = (float) Math.hypot(vx, vy);
+        float nx = vx / (mag == 0 ? 1f : mag);
+        float ny = vy / (mag == 0 ? 1f : mag);
+        float dist = Math.min(400f, mag * 0.25f); // 飞出距离
+        flingTargetX = nx * dist;
+        flingTargetY = ny * dist;
+        animStartMs = System.currentTimeMillis();
+        animDurationMs = FLING_OUT_MS;
+        currentAnim = "flying";
+        say("咻~", "whisper");
+        invalidate();
+        // 飞出结束后自动爬回
+        postDelayed(this::startFlingReturn, FLING_OUT_MS);
+    }
+
+    private void startFlingReturn() {
+        state = "flingBack";
+        animStartMs = System.currentTimeMillis();
+        animDurationMs = FLING_BACK_MS;
+        currentAnim = "";
+        say("我回来啦~", "normal");
+        invalidate();
+        postDelayed(() -> {
+            state = "awake";
+            currentAnim = "";
+            flingTargetX = 0;
+            flingTargetY = 0;
+            invalidate();
+        }, FLING_BACK_MS);
+    }
+
+    private void applyFlingOut(float t) {
+        animTranslateX = flingTargetX * t;
+    }
+
+    private void applyFlingBack(float t) {
+        animTranslateX = flingTargetX * (1 - t);
+    }
+
+    // ==================== 睡眠 / 唤醒（外部调用） ====================
+
+    /** 入睡（长时间无人理时） */
+    public void goToSleep() {
+        if (state.equals("sleeping")) return;
+        state = "sleeping";
+        triggerPet("afk_sleep");
+    }
+
+    /** 唤醒 */
+    public void wake() {
+        if (!state.equals("sleeping")) return;
+        triggerPet("wakeup");
+    }
+
+    public boolean isAsleep() { return state.equals("sleeping"); }
 }
